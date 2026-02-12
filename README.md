@@ -1,12 +1,22 @@
 # dsp-408-ui
 
-This application presents a neat and easy way to interface with the t.racks 408 Digital Signal Processor (DSP). This software communicates over Ethernet and mimics the t.racks DSP Processor Editor software provided by Thomann.
+This application presents a neat and easy way to interface with the t.racks 408 Digital Signal Processor (DSP). This software communicates over Ethernet and mimics the t.racks DSP Processor Editor software provided by Thomann. The goal is to turn one of the cheapest and most versatile pieces of live music hardware into something that is capable of being robust mixing capabilities over a wide array of platforms.
 
 ![dsp-408-ui image](image.png)
 
+## Supported Platforms
+
+**In Active Development:**
+- Windows
+- MacOS
+
+**Coming Soon:**
+- Android
+- iOS
+
 ## Feature Parity
 
-Features that work:
+**Features that work:**
 - Gain
     - Volume Adjust Channels
     - Volume Visualizer Channels
@@ -14,7 +24,7 @@ Features that work:
 - Matrix
     - Assign Inputs -> Outputs
 
-Features that are in active development:
+**Features that are in active development:**
 - Gain
     - Inverse Toggle
 - Matrix
