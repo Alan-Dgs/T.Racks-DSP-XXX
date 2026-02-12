@@ -1,16 +1,47 @@
-# dsp
+# dsp-408-ui
 
-A new Flutter project.
+This application presents a neat and easy way to interface with the t.racks 408 Digital Signal Processor (DSP). This software communicates over Ethernet and mimics the t.racks DSP Processor Editor software provided by Thomann.
+
+![dsp-408-ui image](image.png)
+
+## Feature Parity
+
+Features that work:
+- Gain
+    - Volume Adjust Channels
+    - Volume Visualizer Channels
+    - Mute/Unmute Channels
+- Matrix
+    - Assign Inputs -> Outputs
+
+Features that are in active development:
+- Gain
+    - Inverse Toggle
+- Matrix
+    - Volume attenuation for inputs
+- Gate
+- Compressor
+- Limit
+- Delay
+- GEQ
+- PEQ:
+    - In A, B, C, and D
+    - Out 1, 2, 3, 4, 5, 6, 7, 8
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+0. Ensure that Flutter is installed on your computer. You will need:
+- Flutter - 3.38.9
+- Dart - 3.10.8
 
-A few resources to get you started if this is your first Flutter project:
+1. Run the Makefile:
+```
+$ make setup
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+2. Build on Windows:
+```
+$ make build
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+3. Connect your DSP to your local network. Input the IP address in the field.
