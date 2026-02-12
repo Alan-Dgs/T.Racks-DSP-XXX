@@ -2,9 +2,9 @@
 
 This application presents a neat and easy way to interface with the t.racks 408 Digital Signal Processor (DSP). This software communicates over Ethernet and mimics the t.racks DSP Processor Editor software provided by Thomann. The goal is to turn one of the cheapest and most versatile pieces of live music hardware into something that is capable of having robust mixing functionality over a wide array of platforms.
 
-<img src="image.png" width="48">
+<img src="image.png" width="300">
 
-<img src="image-1.png" width="48">
+<img src="image-1.png" width="300">
 
 ## Supported Platforms
 
