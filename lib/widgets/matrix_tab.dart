@@ -1,7 +1,7 @@
 // Matrix Tab Widget
 //
-// 8-section grid (Out 1-8), each with 4 input gain controls (In A-D).
-// Each crossing point shows a button with the input name and a dB modifier.
+// 8x4 matrix grid: 8 output columns x 4 input rows.
+// Each cell toggles routing on tap and shows a clickable dB gain value.
 //
 // Matrix routing protocol (from PCAP analysis):
 //   cmd 0x3a, data: [output_byte, input_bitmask]
@@ -24,30 +24,113 @@ class MatrixTab extends StatelessWidget {
 
   static const _inputs = ['In A', 'In B', 'In C', 'In D'];
 
+  static const _labelWidth = 56.0;
+  static const _headerHeight = 20.0;
+  static const _gap = 3.0;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(12),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // 4 columns x 2 rows grid
-          final cellWidth = (constraints.maxWidth - 3 * 8) / 4; // 3 gaps
-          final cellHeight = (constraints.maxHeight - 8) / 2;   // 1 gap
+          // Compute square cell size from available space
+          final gridWidth = constraints.maxWidth - _labelWidth;
+          final gridHeight = constraints.maxHeight - _headerHeight - _gap;
+          final cellFromWidth = (gridWidth - _gap * 7) / 8;
+          final cellFromHeight = (gridHeight - _gap * 3) / 4;
+          final cellSize = cellFromWidth < cellFromHeight
+              ? cellFromWidth
+              : cellFromHeight;
 
-          return Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _outputs.map((output) {
-              return SizedBox(
-                width: cellWidth,
-                height: cellHeight,
-                child: _OutputSection(
-                  output: output,
-                  inputs: _inputs,
-                  deviceProvider: deviceProvider,
+          final totalGridWidth = cellSize * 8 + _gap * 7;
+
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Column headers
+                SizedBox(
+                  height: _headerHeight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(width: _labelWidth),
+                      SizedBox(
+                        width: totalGridWidth,
+                        child: Row(
+                          children: _outputs.map((output) {
+                            return SizedBox(
+                              width: cellSize + (output != _outputs.last ? _gap : 0),
+                              child: Text(
+                                deviceProvider.getAlias(output),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFA6E22E),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              );
-            }).toList(),
+                SizedBox(height: _gap),
+                // 4 input rows
+                ...List.generate(_inputs.length, (ri) {
+                  final input = _inputs[ri];
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: ri < 3 ? _gap : 0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: _labelWidth,
+                          height: cellSize,
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: Text(
+                                deviceProvider.getAlias(input),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFF8F8F2),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        ...List.generate(_outputs.length, (ci) {
+                          final output = _outputs[ci];
+                          final enabled = deviceProvider.getMatrixEnabled(output, input);
+                          final gain = deviceProvider.getMatrixGain(output, input);
+                          return Padding(
+                            padding: EdgeInsets.only(right: ci < 7 ? _gap : 0),
+                            child: SizedBox(
+                              width: cellSize,
+                              height: cellSize,
+                              child: _MatrixCell(
+                                output: output,
+                                input: input,
+                                enabled: enabled,
+                                gain: gain,
+                                deviceProvider: deviceProvider,
+                                cellSize: cellSize,
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
           );
         },
       ),
@@ -55,154 +138,88 @@ class MatrixTab extends StatelessWidget {
   }
 }
 
-class _OutputSection extends StatelessWidget {
-  final String output;
-  final List<String> inputs;
-  final DeviceProvider deviceProvider;
-
-  const _OutputSection({
-    required this.output,
-    required this.inputs,
-    required this.deviceProvider,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF3E3D32),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFF75715E), width: 0.5),
-      ),
-      padding: const EdgeInsets.all(6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Output label
-          Text(
-            deviceProvider.getAlias(output),
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-              color: Color(0xFFA6E22E),
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          // Input rows
-          ...inputs.map((input) {
-            final gain = deviceProvider.getMatrixGain(output, input);
-            final enabled = deviceProvider.getMatrixEnabled(output, input);
-            return Expanded(
-              child: _MatrixInputRow(
-                output: output,
-                input: input,
-                gain: gain,
-                enabled: enabled,
-                deviceProvider: deviceProvider,
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-class _MatrixInputRow extends StatelessWidget {
+class _MatrixCell extends StatelessWidget {
   final String output;
   final String input;
-  final double gain;
   final bool enabled;
+  final double gain;
   final DeviceProvider deviceProvider;
+  final double cellSize;
 
-  const _MatrixInputRow({
+  const _MatrixCell({
     required this.output,
     required this.input,
-    required this.gain,
     required this.enabled,
+    required this.gain,
     required this.deviceProvider,
+    required this.cellSize,
   });
-
-  double get _stepSize => gain <= -20.0 ? 0.5 : 0.1;
 
   String _formatGain(double dB) {
     final sign = dB >= 0 ? '+' : '';
-    return '$sign${dB.toStringAsFixed(1)}dB';
-  }
-
-  void _adjust(double delta) {
-    final newValue = (gain + delta).clamp(-60.0, 0.0);
-    deviceProvider.setMatrixGain(output, input, newValue);
+    return '$sign${dB.toStringAsFixed(1)}';
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
-      child: Row(
-        children: [
-          // Down button
-          _StepButton(
-            icon: Icons.remove,
-            onPressed: () => _adjust(-_stepSize),
+    return GestureDetector(
+      onTap: () => deviceProvider.toggleMatrixInput(output, input),
+      child: Container(
+        decoration: BoxDecoration(
+          color: enabled
+              ? const Color(0xFFA6E22E)
+              : const Color(0xFF272822),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: enabled
+                ? const Color(0xFFA6E22E)
+                : const Color(0xFF75715E),
+            width: 0.5,
           ),
-          const SizedBox(width: 2),
-          // Main button: input name + dB value (tap to toggle, long-press for gain)
-          Expanded(
-            child: GestureDetector(
-              onTap: () => deviceProvider.toggleMatrixInput(output, input),
-              onLongPress: () => _showGainDialog(context),
+        ),
+        child: Column(
+          children: [
+            // dB value at top — underlined to convey clickability
+            GestureDetector(
+              onTap: () => _showGainDialog(context),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                width: double.infinity,
+                height: cellSize / 4,
+                padding: const EdgeInsets.symmetric(vertical: 2),
                 decoration: BoxDecoration(
-                  color: enabled
-                      ? const Color(0xFFA6E22E)
-                      : const Color(0xFF272822),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: enabled
-                        ? const Color(0xFFA6E22E)
-                        : const Color(0xFF75715E),
-                    width: 0.5,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: enabled
+                          ? const Color(0xFF272822).withAlpha(60)
+                          : const Color(0xFF75715E).withAlpha(80),
+                      width: 0.5,
+                    ),
                   ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      deviceProvider.getAlias(input),
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: enabled
-                            ? const Color(0xFF272822)
-                            : const Color(0xFFF8F8F2),
-                      ),
-                    ),
-                    Text(
-                      _formatGain(gain),
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: enabled
-                            ? const Color(0xFF272822).withAlpha(180)
-                            : (gain == 0.0
-                                ? const Color(0xFF75715E)
-                                : const Color(0xFFFD971F)),
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  _formatGain(gain),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                    decorationStyle: TextDecorationStyle.dotted,
+                    decorationColor: enabled
+                        ? const Color(0xFF272822).withAlpha(120)
+                        : const Color(0xFF75715E),
+                    color: enabled
+                        ? const Color(0xFF272822).withAlpha(200)
+                        : (gain == 0.0
+                            ? const Color(0xFF75715E)
+                            : const Color(0xFFFD971F)),
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 2),
-          // Up button
-          _StepButton(
-            icon: Icons.add,
-            onPressed: () => _adjust(_stepSize),
-          ),
-        ],
+            // Remaining area for toggle
+            const Spacer(),
+          ],
+        ),
       ),
     );
   }
@@ -212,13 +229,13 @@ class _MatrixInputRow extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('$output \u2190 $input'),
+        title: Text('$input \u2192 $output'),
         content: TextField(
           controller: controller,
           keyboardType:
               const TextInputType.numberWithOptions(decimal: true, signed: true),
           decoration: const InputDecoration(
-            labelText: 'dB (-60.0 to +0.0)',
+            labelText: 'dB (-60.0 to 0.0)',
             border: OutlineInputBorder(),
           ),
           autofocus: true,
@@ -253,35 +270,6 @@ class _MatrixInputRow extends StatelessWidget {
             child: const Text('Set'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StepButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  const _StepButton({required this.icon, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 22,
-      height: 22,
-      child: IconButton(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 12),
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(),
-        style: IconButton.styleFrom(
-          backgroundColor: const Color(0xFF3E3D32),
-          foregroundColor: const Color(0xFFF8F8F2),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(3),
-            side: const BorderSide(color: Color(0xFF75715E), width: 0.5),
-          ),
-        ),
       ),
     );
   }
