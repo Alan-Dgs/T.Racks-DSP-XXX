@@ -247,6 +247,19 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  /// Format current preset with U-number, e.g. "U20: Test"
+  String _currentPresetLabel(DeviceProvider dp) {
+    final name = dp.currentPreset;
+    // Find the preset index whose name matches
+    for (final entry in dp.presets.entries) {
+      if (entry.value == name) {
+        final uNum = 'U${(entry.key + 1).toString().padLeft(2, '0')}';
+        return '$uNum - $name';
+      }
+    }
+    return name;
+  }
+
   @override
   Widget build(BuildContext context) {
     final connectionProvider = context.watch<ConnectionProvider>();
@@ -503,10 +516,10 @@ class _MyHomePageState extends State<MyHomePage> {
                                     const Icon(Icons.music_note,
                                         color: Color(0xFFA6E22E)),
                                     const SizedBox(width: 4),
+                                    const Text('Current: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                                     Text(
-                                      'Current: ${deviceProvider.currentPreset}',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold, fontSize: 12),
+                                      _currentPresetLabel(deviceProvider),
+                                      style: const TextStyle(fontSize: 12),
                                     ),
                                   ],
                                 ],
@@ -520,15 +533,15 @@ class _MyHomePageState extends State<MyHomePage> {
                                   const Icon(Icons.music_note,
                                       color: Color(0xFFA6E22E), size: 16),
                                   const SizedBox(width: 4),
+                                  const Text('Current: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                                   Expanded(
                                     child: Text(
-                                      'Current: ${deviceProvider.currentPreset}',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold, fontSize: 12),
+                                      _currentPresetLabel(deviceProvider),
+                                      style: const TextStyle(fontSize: 12),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                ],
+                                ]
                               ),
                             ),
                         ],
@@ -544,6 +557,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 fit: StackFit.expand,
                 children: [
                   TabBarView(
+                    physics: const NeverScrollableScrollPhysics(),
                     children: _tabs.map((name) {
                       if (name == 'Gain') {
                         return GainTab(deviceProvider: deviceProvider);
