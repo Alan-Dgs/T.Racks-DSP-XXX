@@ -10,6 +10,8 @@ functionality over a wide array of platforms.
 
 <img src="image-1.png" width="600">
 
+<img src="image-2.png" width="600">
+
 ## Supported Platforms
 
 **In Active Development:**
@@ -25,12 +27,14 @@ functionality over a wide array of platforms.
 ## Feature Parity
 
 **Features that work:**
+- Save & Load Presets
 - Gain
     - Volume Adjust Channels
     - Volume Visualizer Channels
     - Mute/Unmute Channels
 - Matrix
     - Assign Inputs -> Outputs
+- GEQ
 
 **Features that are in active development:**
 - Gain
@@ -41,7 +45,6 @@ functionality over a wide array of platforms.
 - Compressor
 - Limit
 - Delay
-- GEQ
 - PEQ:
     - In A, B, C, and D
     - Out 1, 2, 3, 4, 5, 6, 7, 8
