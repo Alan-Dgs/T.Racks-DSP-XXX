@@ -32,8 +32,32 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Download build artifacts
+      - name: Verify version is greater than latest release
         if: steps.check.outputs.exists == 'false'
+        id: compare
+        run: |
+          NEW="${{ steps.version.outputs.version }}"
+          # Get the latest tag (strip leading 'v')
+          LATEST=$(git tag --list 'v*' --sort=-v:refname | head -n1 | sed 's/^v//')
+
+          if [ -z "$LATEST" ]; then
+            echo "No previous release found, proceeding."
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          else
+            # sort -V puts the smaller version first; if NEW sorts first it's <= LATEST
+            HIGHEST=$(printf '%s\n%s' "$NEW" "$LATEST" | sort -V | tail -n1)
+            if [ "$HIGHEST" = "$LATEST" ]; then
+              echo "::error::Version $NEW is not greater than latest release $LATEST. Bump the version before releasing."
+              echo "valid=false" >> "$GITHUB_OUTPUT"
+              exit 1
+            else
+              echo "Version $NEW > $LATEST, proceeding."
+              echo "valid=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Download build artifacts
+        if: steps.check.outputs.exists == 'false' && steps.compare.outputs.valid == 'true'
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: build.yaml
@@ -42,13 +66,13 @@ jobs:
           path: artifacts
 
       - name: Create tag
-        if: steps.check.outputs.exists == 'false'
+        if: steps.check.outputs.exists == 'false' && steps.compare.outputs.valid == 'true'
         run: |
           git tag "${{ steps.version.outputs.tag }}"
           git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Create GitHub Release
-        if: steps.check.outputs.exists == 'false'
+        if: steps.check.outputs.exists == 'false' && steps.compare.outputs.valid == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
