@@ -56,7 +56,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: '3.38.9'
 
       # Linux build dependencies, Linux needs ninja-build and libgtk-3-dev for the Flutter Linux build
       - name: Install Linux dependencies
