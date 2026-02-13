@@ -188,6 +188,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _showDebug = false;
   bool _showTimestamps = false;
   String? _selectedPreset;
+  String? _lastSyncedPreset;
 
   static const _tabs = [
     'Gain', 'Gate', 'Comp', 'Limit', 'Delay', 'Matrix', 'GEQ', 'PEQ'
@@ -264,6 +265,21 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     final connectionProvider = context.watch<ConnectionProvider>();
     final deviceProvider = context.watch<DeviceProvider>();
+
+    // Sync dropdown to device preset only when the device preset changes
+    final currentName = deviceProvider.currentPreset;
+    if (currentName != _lastSyncedPreset) {
+      _lastSyncedPreset = currentName;
+      if (connectionProvider.isConnected && deviceProvider.presets.isNotEmpty) {
+        final matchIndex = deviceProvider.presets.entries
+            .where((e) => e.value == currentName)
+            .map((e) => e.key)
+            .firstOrNull;
+        if (matchIndex != null) {
+          _selectedPreset = matchIndex.toString();
+        }
+      }
+    }
 
     // Auto-scroll debug log when at the top and new messages arrive
     final messageCount = connectionProvider.receivedMessages.length;
@@ -489,10 +505,29 @@ class _MyHomePageState extends State<MyHomePage> {
                                   const SizedBox(width: 8),
                                   ElevatedButton(
                                     onPressed: _selectedPreset != null
-                                        ? () {
+                                        ? () async {
                                             final index = int.tryParse(_selectedPreset!);
-                                            if (index != null) {
-                                              final name = deviceProvider.presets[index] ?? 'Preset';
+                                            if (index == null) return;
+                                            final name = deviceProvider.presets[index] ?? 'Preset';
+                                            final uNum = 'U${(index + 1).toString().padLeft(2, '0')}';
+                                            final confirmed = await showDialog<bool>(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                title: const Text('Save Preset'),
+                                                content: Text('Save current settings to $uNum "$name"?'),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () => Navigator.pop(ctx, false),
+                                                    child: const Text('Cancel'),
+                                                  ),
+                                                  TextButton(
+                                                    onPressed: () => Navigator.pop(ctx, true),
+                                                    child: const Text('Save'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                            if (confirmed == true && context.mounted) {
                                               context.read<ConnectionProvider>().savePreset(index, name);
                                             }
                                           }
