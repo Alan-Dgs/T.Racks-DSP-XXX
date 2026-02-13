@@ -12,6 +12,7 @@ import 'devices/t_racks408/providers/connection_provider.dart';
 
 // Widgets
 import 'devices/t_racks408/widgets/gain_tab.dart';
+import 'devices/t_racks408/widgets/geq_tab.dart';
 import 'devices/t_racks408/widgets/matrix_tab.dart';
 
 // Overlays
@@ -189,9 +190,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String? _selectedPreset;
 
   static const _tabs = [
-    'Gain', 'Gate', 'Comp', 'Limit', 'Delay', 'Matrix', 'GEQ',
-    'In A', 'In B', 'In C', 'In D',
-    'Out 1', 'Out 2', 'Out 3', 'Out 4', 'Out 5', 'Out 6', 'Out 7', 'Out 8',
+    'Gain', 'Gate', 'Comp', 'Limit', 'Delay', 'Matrix', 'GEQ', 'PEQ'
   ];
 
   @override
@@ -385,7 +384,7 @@ class _MyHomePageState extends State<MyHomePage> {
                               children: [
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: connectionProvider.isSocketConnected
+                                    onPressed: connectionProvider.isSocketConnected || connectionProvider.isLoading
                                         ? null
                                         : _connect,
                                     child: const Text('Connect'),
@@ -394,7 +393,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: connectionProvider.isSocketConnected
+                                    onPressed: connectionProvider.isSocketConnected || connectionProvider.isLoading
                                         ? _disconnect
                                         : null,
                                     child: const Text('Disconnect'),
@@ -480,6 +479,19 @@ class _MyHomePageState extends State<MyHomePage> {
                                         ? () {
                                             final index = int.tryParse(_selectedPreset!);
                                             if (index != null) {
+                                              final name = deviceProvider.presets[index] ?? 'Preset';
+                                              context.read<ConnectionProvider>().savePreset(index, name);
+                                            }
+                                          }
+                                        : null,
+                                    child: const Text('Save', style: TextStyle(fontSize: 12)),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton(
+                                    onPressed: _selectedPreset != null
+                                        ? () {
+                                            final index = int.tryParse(_selectedPreset!);
+                                            if (index != null) {
                                               context.read<ConnectionProvider>().loadPreset(index);
                                             }
                                           }
@@ -539,6 +551,9 @@ class _MyHomePageState extends State<MyHomePage> {
                       if (name == 'Matrix') {
                         return MatrixTab(deviceProvider: deviceProvider);
                       }
+                      if (name == 'GEQ') {
+                        return GeqTab(deviceProvider: deviceProvider);
+                      }
                       return Center(child: Text('$name Tab'));
                     }).toList(),
                   ),
@@ -550,19 +565,22 @@ class _MyHomePageState extends State<MyHomePage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (connectionProvider.isLoading) ...[
-                              SizedBox(
-                                width: 48,
-                                height: 48,
-                                child: CircularProgressIndicator(
-                                  value: connectionProvider.initProgress,
-                                  color: const Color(0xFFA6E22E),
-                                  backgroundColor: const Color(0xFF75715E),
-                                  strokeWidth: 4,
-                                ),
-                              ),
+                              if (connectionProvider.isSocketConnected) ...[
+                                SizedBox(
+                                  width: 48,
+                                  height: 48,
+                                  child: CircularProgressIndicator(
+                                    value: connectionProvider.initProgress,
+                                    color: const Color(0xFFA6E22E),
+                                    backgroundColor: const Color(0xFF75715E),
+                                    strokeWidth: 4,
+                                  ),
+                              )],
                               const SizedBox(height: 16),
                               Text(
-                                  'Initializing... ${(connectionProvider.initProgress * 100).toInt()}%',
+                                  connectionProvider.isSocketConnected && connectionProvider.isLoading
+                                    ? 'Initializing... ${(connectionProvider.initProgress * 100).toInt()}%'
+                                    : "Establishing Connection...",
                                   style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,

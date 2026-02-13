@@ -85,12 +85,24 @@ class DeviceProvider extends ChangeNotifier {
     'Out 5': 0, 'Out 6': 0, 'Out 7': 0, 'Out 8': 0,
   };
 
+  // GEQ bands: 31-band graphic EQ per input channel (-12 to +12 dB)
+  final Map<String, List<double>> _geqBands = {
+    'In A': List.filled(31, 0.0),
+    'In B': List.filled(31, 0.0),
+    'In C': List.filled(31, 0.0),
+    'In D': List.filled(31, 0.0),
+  };
+
   // Channel aliases
   final Map<String, String> _channelAliases = {};
 
   // Gain throttle (50ms per channel)
   final Map<String, double> _pendingGain = {};
   final Map<String, Timer> _gainTimers = {};
+
+  // GEQ throttle (50ms per channel+band key)
+  final Map<String, double> _pendingGeq = {};
+  final Map<String, Timer> _geqTimers = {};
 
   // Meter levels (linear float values, 0.0 = silence)
   // Channel order matches protocol: In A, In B, In C, In D, Out 1-8
@@ -186,6 +198,75 @@ class DeviceProvider extends ChangeNotifier {
     await prefs.remove('channel_alias_$channel');
   }
 
+  /// Get all GEQ band values for a channel
+  List<double> getGeqBands(String channel) =>
+      List.of(_geqBands[channel] ?? List.filled(31, 0.0));
+
+  /// Get a single GEQ band value
+  double getGeqBand(String channel, int bandIndex) =>
+      (_geqBands[channel] ?? List.filled(31, 0.0))[bandIndex];
+
+  /// Set a single GEQ band value (throttled to 50ms per channel+band)
+  void setGeqBand(String channel, int bandIndex, double dB) {
+    final bands = _geqBands[channel];
+    if (bands == null || bandIndex < 0 || bandIndex >= 31) return;
+
+    final quantized = _protocolService.quantizeGeqDb(dB.clamp(-12.0, 12.0));
+    bands[bandIndex] = quantized;
+    notifyListeners();
+
+    if (!_socketService.isConnected) return;
+
+    final key = '$channel:$bandIndex';
+    _pendingGeq[key] = quantized;
+    if (!_geqTimers.containsKey(key)) {
+      _geqTimers[key] = Timer(const Duration(milliseconds: 50), () {
+        _geqTimers.remove(key);
+        final pending = _pendingGeq.remove(key);
+        if (pending != null) {
+          _sendGeqBandCommand(channel, bandIndex, pending);
+        }
+      });
+    }
+  }
+
+  /// Send the actual GEQ band command to the device
+  void _sendGeqBandCommand(String channel, int bandIndex, double dB) {
+    final command =
+        _protocolService.buildGeqBandCommand(channel, bandIndex, dB);
+    _socketService.enqueue(command);
+  }
+
+  /// Set all GEQ bands at once (for presets/draw)
+  void setAllGeqBands(String channel, List<double> values) {
+    if (values.length != 31) return;
+    _geqBands[channel] = values.map((v) => v.clamp(-12.0, 12.0)).toList();
+    notifyListeners();
+  }
+
+  /// Reset all GEQ bands to flat (0 dB) and send commands
+  void resetGeqBands(String channel) {
+    // Cancel any pending GEQ timers for this channel
+    _geqTimers.keys
+        .where((k) => k.startsWith('$channel:'))
+        .toList()
+        .forEach((k) {
+      _geqTimers.remove(k)?.cancel();
+      _pendingGeq.remove(k);
+    });
+
+    _geqBands[channel] = List.filled(31, 0.0);
+    notifyListeners();
+
+    if (!_socketService.isConnected) return;
+
+    // Send reset command for all 31 bands
+    for (int i = 0; i < 31; i++) {
+      final command = _protocolService.buildGeqBandCommand(channel, i, 0.0);
+      _socketService.enqueue(command);
+    }
+  }
+
   DeviceProvider(this._socketService, this._protocolService) {
     // Listen to socket data stream
     _dataSubscription = _socketService.dataStream.listen(_handleIncomingData);
@@ -221,6 +302,16 @@ class DeviceProvider extends ChangeNotifier {
   /// Set the current preset name
   void setCurrentPreset(String name) {
     _currentPreset = name;
+    notifyListeners();
+  }
+
+  /// Apply parsed GEQ bands from config dump
+  void applyGeqBands(Map<String, List<double>> bands) {
+    for (final entry in bands.entries) {
+      if (_geqBands.containsKey(entry.key) && entry.value.length == 31) {
+        _geqBands[entry.key] = List.of(entry.value);
+      }
+    }
     notifyListeners();
   }
 
@@ -325,6 +416,12 @@ class DeviceProvider extends ChangeNotifier {
     _gainTimers.clear();
     _pendingGain.clear();
 
+    for (final t in _geqTimers.values) {
+      t.cancel();
+    }
+    _geqTimers.clear();
+    _pendingGeq.clear();
+
     _presets.clear();
     _currentPreset = 'Unknown';
 
@@ -344,12 +441,18 @@ class DeviceProvider extends ChangeNotifier {
     _matrixGains.clear();
     _matrixRouting.updateAll((key, value) => 0);
 
+    // Reset GEQ
+    _geqBands.updateAll((key, value) => List.filled(31, 0.0));
+
     notifyListeners();
   }
 
   @override
   void dispose() {
     for (final t in _gainTimers.values) {
+      t.cancel();
+    }
+    for (final t in _geqTimers.values) {
       t.cancel();
     }
     _dataSubscription?.cancel();

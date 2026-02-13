@@ -1,6 +1,10 @@
 # dsp-408-ui
 
-This application presents a neat and easy way to interface with the t.racks 408 Digital Signal Processor (DSP). This software communicates over Ethernet and mimics the t.racks DSP Processor Editor software provided by Thomann. The goal is to turn one of the cheapest and most versatile pieces of live music hardware into something that is capable of having robust mixing functionality over a wide array of platforms.
+This application presents a neat and easy way to interface with the t.racks 408 Digital Signal Processor
+(DSP). This software communicates over the local intranet and mimics communications sent by the t.racks
+DSP Processor Editor software provided by Thomann. The goal is to turn one of the cheapest and most
+versatile pieces of live music hardware into something that is capable of having robust mixing
+functionality over a wide array of platforms.
 
 <img src="image.png" width="600">
 
@@ -9,12 +13,14 @@ This application presents a neat and easy way to interface with the t.racks 408 
 ## Supported Platforms
 
 **In Active Development:**
+- t.racks DSP 408
 - Windows
-- MacOS
-
-**Coming Soon:**
 - Android
-- iOS
+
+**Untested:**
+- iOS (but it theoretically works)
+- MacOS (but it theoretically works)
+- t.racks DSP 204 (probably doesn't work yet--will work on this later)
 
 ## Feature Parity
 
@@ -28,7 +34,7 @@ This application presents a neat and easy way to interface with the t.racks 408 
 
 **Features that are in active development:**
 - Gain
-    - Inverse Toggle
+    - Invert Phase Toggle
 - Matrix
     - Volume attenuation for inputs
 - Gate
@@ -42,18 +48,17 @@ This application presents a neat and easy way to interface with the t.racks 408 
 
 ## Getting Started
 
-0. Ensure that Flutter is installed on your computer. You will need:
-- Flutter - 3.38.9
-- Dart - 3.10.8
-
-1. Run the Makefile:
+### Building an .exe file
+0. Ensure that Flutter is installed on your computer. If you're running Windows, you will need to ensure that `flutter` is installed and on your `$PATH`. You will need:
+    - Flutter - 3.38.9
+    - Dart - 3.10.8
+1. Run setup:
 ```
 $ make setup
 ```
-
-2. Build on Windows:
+2. Build the project:
 ```
-$ make build
+$ make build-windows
 ```
-
-3. Connect your DSP to your local network. Input the IP address in the field.
+3. Run the `.exe` file generated at `./build/
+4. Connect your DSP to your local network. Input the IP address of the DSP in the field.

@@ -209,6 +209,11 @@ class ConnectionProvider extends ChangeNotifier {
             _deviceProvider!.applyMatrixRouting(routing);
             _addMessage('Applied matrix routing: ${routing.length} outputs');
           }
+          final geq = _initializer.geqBands;
+          if (geq.isNotEmpty) {
+            _deviceProvider!.applyGeqBands(geq);
+            _addMessage('Applied GEQ: ${geq.length} channels');
+          }
           final preset = _initializer.currentPreset;
           if (preset != 'Unknown') {
             _deviceProvider!.setCurrentPreset(preset);
@@ -249,6 +254,30 @@ class ConnectionProvider extends ChangeNotifier {
     _sendNextPresetLoadCommand();
   }
 
+  /// Save (store) the current settings to a preset slot (0-based index).
+  ///
+  /// Stops keepalive, sends the store preset name + slot commands,
+  /// then restarts keepalive.
+  void savePreset(int presetIndex, String presetName) {
+    if (!_socketService.isConnected || _isLoading) return;
+
+    _isLoading = true;
+    _addMessage('Saving to preset U${(presetIndex + 1).toString().padLeft(2, '0')} "$presetName"...');
+    notifyListeners();
+
+    // Stop keepalive queue
+    _socketService.stopQueue();
+
+    // Build store command sequence and reset state
+    _presetLoadQueue = ChannelConfigParser.buildStorePresetSequence(presetIndex, presetName);
+    _presetLoadIndex = 0;
+    _presetLoadWaiting = false;
+    _presetConfigParser = null; // No config parsing needed for save
+
+    // Send first command
+    _sendNextPresetLoadCommand();
+  }
+
   /// Send the next command in the preset loading sequence
   void _sendNextPresetLoadCommand() {
     if (_presetLoadQueue == null) return;
@@ -260,8 +289,12 @@ class ConnectionProvider extends ChangeNotifier {
     }
 
     if (_presetLoadIndex >= _presetLoadQueue!.length) {
-      // All commands sent — apply parsed config
-      _addMessage('Preset load complete');
+      // All commands sent — apply parsed config (if loading, not saving)
+      if (_presetConfigParser != null) {
+        _addMessage('Preset load complete');
+      } else {
+        _addMessage('Preset saved');
+      }
       if (_deviceProvider != null && _presetConfigParser != null) {
         final gains = _presetConfigParser!.channelGains;
         if (gains.isNotEmpty) {
@@ -272,6 +305,11 @@ class ConnectionProvider extends ChangeNotifier {
         if (routing.isNotEmpty) {
           _deviceProvider!.applyMatrixRouting(routing);
           _addMessage('Applied matrix routing: ${routing.length} outputs');
+        }
+        final geq = _presetConfigParser!.geqBands;
+        if (geq.isNotEmpty) {
+          _deviceProvider!.applyGeqBands(geq);
+          _addMessage('Applied GEQ: ${geq.length} channels');
         }
         final preset = _presetConfigParser!.currentPreset;
         if (preset != 'Unknown') {

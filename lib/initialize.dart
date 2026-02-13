@@ -46,6 +46,7 @@ class DSPInitializer extends ChangeNotifier {
   // Getters for parsed config (delegated to config parser)
   Map<String, double> get channelGains => _configParser.channelGains;
   Map<String, int> get matrixRouting => _configParser.matrixRouting;
+  Map<String, List<double>> get geqBands => _configParser.geqBands;
 
   /// Reset the initialization state
   void reset() {

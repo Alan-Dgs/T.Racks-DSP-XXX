@@ -1,4 +1,4 @@
-.PHONY: setup get clean analyze test build run dev
+.PHONY: setup get clean analyze test build-windows build-android build-ios build-macos run-windows dev-windows
 
 # First-time project setup
 setup: get
@@ -22,13 +22,25 @@ test:
 	flutter test
 
 # Build Windows release
-build:
+build-windows:
 	flutter build windows
 
+# Build MacOS release
+build-macos:
+	flutter build macos
+
+# Build MacOS release
+build-android:
+	flutter build apk
+	
+# Build MacOS release. You MUST be on an Apple device for this to work.
+build-ios:
+	flutter build ios
+
 # Run on Windows (debug)
-run:
+run-windows:
 	flutter run -d windows
 
 # Run on Windows (debug) with hot reload
-dev:
+dev-windows:
 	flutter run -d windows --hot

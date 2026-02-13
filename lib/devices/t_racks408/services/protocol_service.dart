@@ -240,6 +240,38 @@ class ProtocolService {
     return command;
   }
 
+  /// Convert GEQ dB value (-12.0 to +12.0) to protocol byte (0x00-0xF0)
+  /// Linear: byte = (dB * 10) + 120, resolution 0.1 dB
+  int geqDbToValue(double dB) => (dB * 10 + 120).round().clamp(0, 240);
+
+  /// Convert GEQ protocol byte back to dB
+  double geqValueToDb(int value) => (value - 120) / 10.0;
+
+  /// Quantize GEQ dB to 0.1 dB resolution
+  double quantizeGeqDb(double dB) => (dB * 10).round() / 10.0;
+
+  /// Build GEQ band command (cmd 0x05 0x48)
+  ///
+  /// Protocol: `10 02 00 01 05 48 [channel] [band] [value] 00 10 03 [checksum]`
+  /// Channel: 0x00=In A, 0x01=In B, 0x02=In C, 0x03=In D
+  /// Band: 0x00-0x1E (0-30, 20Hz-20kHz)
+  /// Value: 0x00-0xF0 (0-240, -12.0 to +12.0 dB)
+  List<int> buildGeqBandCommand(String channel, int bandIndex, double dB) {
+    const channelMap = {
+      'In A': 0x00, 'In B': 0x01, 'In C': 0x02, 'In D': 0x03,
+    };
+    final ch = channelMap[channel];
+    if (ch == null) throw ArgumentError('Invalid GEQ channel: $channel');
+    if (bandIndex < 0 || bandIndex > 30) {
+      throw ArgumentError('Invalid band index: $bandIndex');
+    }
+
+    final value = geqDbToValue(quantizeGeqDb(dB));
+    final dataBytes = [0x00, 0x01, 0x05, 0x48, ch, bandIndex, value, 0x00];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
   /// Build matrix routing command (cmd 0x3a)
   ///
   /// Protocol: `10 02 00 01 03 3a [output_byte] [input_bitmask] 10 03 [checksum]`

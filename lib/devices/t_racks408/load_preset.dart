@@ -12,6 +12,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'protocol.dart';
+import 'services/protocol_service.dart';
 
 /// Parses channel configuration from 0x24 response chunks.
 ///
@@ -25,10 +26,12 @@ class ChannelConfigParser {
   // Parsed state
   final Map<String, double> _channelGains = {};
   final Map<String, int> _matrixRouting = {};
+  final Map<String, List<double>> _geqBands = {};
   String _currentPreset = 'Unknown';
 
   Map<String, double> get channelGains => Map.unmodifiable(_channelGains);
   Map<String, int> get matrixRouting => Map.unmodifiable(_matrixRouting);
+  Map<String, List<double>> get geqBands => Map.unmodifiable(_geqBands);
   // ignore: unnecessary_getters_setters
   String get currentPreset => _currentPreset;
   // ignore: unnecessary_getters_setters
@@ -38,6 +41,7 @@ class ChannelConfigParser {
     _configChunks.clear();
     _channelGains.clear();
     _matrixRouting.clear();
+    _geqBands.clear();
     _currentPreset = 'Unknown';
   }
 
@@ -184,6 +188,28 @@ class ChannelConfigParser {
         debugPrint('Config: $output matrix = 0x${stream[bitmaskOffset].toRadixString(16).padLeft(2, '0')}');
       }
     }
+
+    // Extract GEQ bands for input channels.
+    // Each input record has 31 x u16 LE values at offset +16 from the channel name.
+    // Value encoding: same as GEQ set-band command (0-240, dB = (value - 120) / 10.0)
+    final proto = ProtocolService();
+    for (final input in ['In A', 'In B', 'In C', 'In D']) {
+      final offset = channelOffsets[input];
+      if (offset == null) continue;
+
+      final geqStart = offset + 16; // GEQ data starts 16 bytes after channel name
+      final geqEnd = geqStart + 31 * 2; // 31 bands x 2 bytes each
+      if (geqEnd > stream.length) continue;
+
+      final bands = <double>[];
+      for (int b = 0; b < 31; b++) {
+        final pos = geqStart + b * 2;
+        final rawValue = stream[pos] | (stream[pos + 1] << 8);
+        bands.add(proto.geqValueToDb(rawValue));
+      }
+      _geqBands[input] = bands;
+      debugPrint('Config: $input GEQ loaded (${bands.where((v) => v != 0.0).length} non-zero bands)');
+    }
   }
 
   /// Build a load preset command for the given preset index (0-based).
@@ -207,6 +233,48 @@ class ChannelConfigParser {
     return [
       buildLoadPresetCommand(presetIndex),
       ...TRacksProto.configDumpCommands,
+      ...TRacksProto.statusQueryCommands,
+    ];
+  }
+
+  /// Build the store preset name command (cmd 0x26).
+  ///
+  /// Protocol: `10 02 00 01 0f 26 [14-char name] 10 03 [checksum]`
+  /// Name is padded with spaces to exactly 14 characters.
+  static List<int> buildStorePresetNameCommand(String name) {
+    final padded = name.length >= 14
+        ? name.substring(0, 14)
+        : name.padRight(14);
+    final nameBytes = padded.codeUnits;
+    final dataBytes = [0x00, 0x01, 0x0f, 0x26, ...nameBytes];
+    int checksum = 1;
+    for (final b in dataBytes) {
+      checksum ^= b;
+    }
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Build the store preset slot command (cmd 0x21).
+  ///
+  /// Protocol: `10 02 00 01 02 21 [slot] 10 03 [checksum]`
+  /// Slot is 1-based (U01 = 1, U20 = 20).
+  static List<int> buildStorePresetSlotCommand(int presetIndex) {
+    final dataBytes = [0x00, 0x01, 0x02, 0x21, presetIndex + 1];
+    int checksum = 1;
+    for (final b in dataBytes) {
+      checksum ^= b;
+    }
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Build the full command sequence for storing/saving a preset:
+  /// 1. Store preset name command (cmd 0x26)
+  /// 2. Store to slot command (cmd 0x21)
+  /// 3. Status query (cmd 0x12)
+  static List<List<int>> buildStorePresetSequence(int presetIndex, String name) {
+    return [
+      buildStorePresetNameCommand(name),
+      buildStorePresetSlotCommand(presetIndex),
       ...TRacksProto.statusQueryCommands,
     ];
   }
