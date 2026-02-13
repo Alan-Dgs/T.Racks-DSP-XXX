@@ -42,13 +42,27 @@ jobs:
             artifact-path: build/linux/arm64/release/bundle
             artifact-name: dsp-linux-arm64
 
-          - platform: macos   # macOS also won't be signed/notarized without extra steps
+          - platform: linux-flatpak-x64
+            os: ubuntu-latest
+            build-cmd: flutter build linux --release
+            artifact-path: dsp.flatpak
+            artifact-name: dsp-linux-flatpak-x64
+            bundle-path: build/linux/x64/release/bundle
+
+          - platform: linux-flatpak-arm64
+            os: ubuntu-24.04-arm
+            build-cmd: flutter build linux --release
+            artifact-path: dsp.flatpak
+            artifact-name: dsp-linux-flatpak-arm64
+            bundle-path: build/linux/arm64/release/bundle
+
+          - platform: macos
             os: macos-latest
             build-cmd: flutter build macos --release
             artifact-path: build/macos/Build/Products/Release
             artifact-name: dsp-macos
 
-          - platform: ios   # iOS uses --no-codesign since CI won't have your signing certs. For real distribution you'd need to set up code signing with match/fastlane
+          - platform: ios
             os: macos-latest
             build-cmd: flutter build ios --release --no-codesign
             artifact-path: build/ios/iphoneos/Runner.app
@@ -61,13 +75,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: subosito/flutter-action@v2
-        if: matrix.platform != 'linux-arm64'
+        if: "!contains(matrix.platform, 'arm64')"
         with:
           flutter-version: '3.38.9'
 
       # ARM64: flutter-action doesn't support linux-arm64, install manually
       - name: Install Flutter (ARM64)
-        if: matrix.platform == 'linux-arm64'
+        if: contains(matrix.platform, 'arm64')
         run: |
           git clone https://github.com/flutter/flutter.git -b 3.38.9 --depth 1 "$HOME/flutter"
           echo "$HOME/flutter/bin" >> $GITHUB_PATH
@@ -87,59 +101,26 @@ jobs:
       - name: Build
         run: ${{ matrix.build-cmd }}
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.artifact-path }}
-
-  flatpak:
-    needs: build  # reuses the linux bundle artifacts
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            os: ubuntu-latest
-            bundle-artifact: dsp-linux-x64
-            bundle-path: build/linux/x64/release/bundle
-            artifact-name: dsp-linux-flatpak-x64
-
-          - arch: arm64
-            os: ubuntu-24.04-arm
-            bundle-artifact: dsp-linux-arm64
-            bundle-path: build/linux/arm64/release/bundle
-            artifact-name: dsp-linux-flatpak-arm64
-
-    runs-on: ${{ matrix.os }}
-    name: linux-flatpak-${{ matrix.arch }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download Linux bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.bundle-artifact }}
-          path: ${{ matrix.bundle-path }}
-
+      # Flatpak packaging steps (only for linux-flatpak-* platforms)
       - name: Symlink bundle to arch-neutral path
+        if: contains(matrix.platform, 'flatpak')
         run: ln -s $(pwd)/${{ matrix.bundle-path }} build/linux/bundle
 
       - name: Install Flatpak and flatpak-builder
+        if: contains(matrix.platform, 'flatpak')
         run: |
-          sudo apt-get update
           sudo apt-get install -y flatpak flatpak-builder
           sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           sudo flatpak install -y flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
 
       - name: Build Flatpak
+        if: contains(matrix.platform, 'flatpak')
         run: |
           flatpak-builder --force-clean --repo=flatpak-repo flatpak-build flatpak/com.example.dsp.yml
           flatpak build-bundle flatpak-repo dsp.flatpak com.example.dsp
 
-      - name: Upload Flatpak artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: dsp.flatpak
+          path: ${{ matrix.artifact-path }}
