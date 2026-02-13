@@ -55,10 +55,17 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: subosito/flutter-action@v2
+        if: matrix.platform != 'linux-arm64'
         with:
           flutter-version: '3.38.9'
 
-      # Linux build dependencies, Linux needs ninja-build and libgtk-3-dev for the Flutter Linux build
+      # ARM64: flutter-action doesn't support linux-arm64, install manually
+      - name: Install Flutter (ARM64)
+        if: matrix.platform == 'linux-arm64'
+        run: |
+          git clone https://github.com/flutter/flutter.git -b 3.38.9 --depth 1 "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> $GITHUB_PATH
+
       - name: Install Linux dependencies
         if: startsWith(matrix.platform, 'linux')
         run: |
