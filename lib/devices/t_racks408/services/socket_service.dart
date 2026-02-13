@@ -29,13 +29,26 @@ class SocketService extends ChangeNotifier {
   Timer? _responseTimeout;
   List<int>? _keepaliveCommand;
 
+  // Refresh interval (keepalive polling rate)
+  int _refreshIntervalMs = 300;
+
   // Getters
   bool get isConnected => _isConnected;
   String get host => _host;
   int get port => _port;
   int get packetsSent => _packetsSent;
   int get packetsReceived => _packetsReceived;
+  int get refreshIntervalMs => _refreshIntervalMs;
   Stream<List<int>> get dataStream => _dataController.stream;
+
+  /// Update the refresh interval (keepalive polling rate) in milliseconds.
+  void setRefreshInterval(int ms) {
+    _refreshIntervalMs = ms.clamp(5, 300);
+    if (_keepaliveCommand != null) {
+      _resetKeepaliveTimer();
+    }
+    notifyListeners();
+  }
 
   /// Connect to TCP server
   Future<void> connect(String host, int port) async {
@@ -59,7 +72,6 @@ class SocketService extends ChangeNotifier {
             _responseTimeout?.cancel();
             _responseTimeout = null;
             _dataController.add(data);
-            notifyListeners();
             // Immediately send next queued command if any
             _trySendNext();
           }
@@ -103,7 +115,6 @@ class SocketService extends ChangeNotifier {
 
     _socket!.add(command);
     _packetsSent++;
-    notifyListeners();
   }
 
   /// Enqueue a single command and send immediately if possible
@@ -146,7 +157,7 @@ class SocketService extends ChangeNotifier {
   void _resetKeepaliveTimer() {
     _queueTimer?.cancel();
     if (_keepaliveCommand == null) return;
-    _queueTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
+    _queueTimer = Timer.periodic(Duration(milliseconds: _refreshIntervalMs), (_) {
       _sendKeepalive();
     });
   }
@@ -161,7 +172,6 @@ class SocketService extends ChangeNotifier {
     try {
       _socket!.add(_keepaliveCommand!);
       _packetsSent++;
-      notifyListeners();
     } catch (e) {
       debugPrint('Keepalive send failed: $e');
       stopQueue();
@@ -190,7 +200,6 @@ class SocketService extends ChangeNotifier {
           _trySendNext();
         }
       });
-      notifyListeners();
     } catch (e) {
       debugPrint('Queue send failed: $e');
       stopQueue();

@@ -202,8 +202,16 @@ class DeviceProvider extends ChangeNotifier {
       _currentPreset = message.name;
       notifyListeners();
     } else if (message is KeepaliveMessage) {
+      // Only rebuild if meter levels changed meaningfully (avoid constant redraws)
+      bool changed = false;
+      for (int i = 0; i < message.meterLevels.length && i < _meterLevels.length; i++) {
+        if ((message.meterLevels[i] - _meterLevels[i]).abs() > 0.005) {
+          changed = true;
+          break;
+        }
+      }
       _meterLevels = message.meterLevels;
-      notifyListeners();
+      if (changed) notifyListeners();
     } else if (message is DeviceInfoMessage) {
       // Could store device info if needed
       debugPrint('Device: ${message.deviceName}');

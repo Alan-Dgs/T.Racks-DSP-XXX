@@ -6,9 +6,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/socket_service.dart';
 import '../services/protocol_service.dart';
-import '../initialize.dart';
+import '../../../initialize.dart';
 import '../load_preset.dart';
 import 'device_provider.dart';
+import '../protocol.dart';
 
 class ConnectionProvider extends ChangeNotifier {
   final SocketService _socketService;
@@ -69,15 +70,15 @@ class ConnectionProvider extends ChangeNotifier {
     _dataSubscription = _socketService.dataStream.listen(_handleSocketData);
   }
 
-  /// Handle socket state changes
+  /// Handle socket state changes — only notify if status actually changed
   void _onSocketStateChanged() {
-    if (_socketService.isConnected) {
-      _connectionStatus =
-          'Connected to ${_socketService.host}:${_socketService.port}';
-    } else {
-      _connectionStatus = 'Disconnected';
+    final newStatus = _socketService.isConnected
+        ? 'Connected to ${_socketService.host}:${_socketService.port}'
+        : 'Disconnected';
+    if (newStatus != _connectionStatus) {
+      _connectionStatus = newStatus;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   /// Handle incoming socket data
@@ -105,6 +106,7 @@ class ConnectionProvider extends ChangeNotifier {
       _presetLoadIndex++;
       _addMessage(
           'Preset load response ($_presetLoadIndex/${_presetLoadQueue!.length})');
+      notifyListeners();
 
       Future.delayed(const Duration(milliseconds: 50), () {
         _sendNextPresetLoadCommand();
@@ -117,14 +119,14 @@ class ConnectionProvider extends ChangeNotifier {
       _initializer.processStartupResponse();
       _addMessage(
           'Response received - sending next command (${_initializer.currentIndex}/${_initializer.totalCommands})');
+      notifyListeners();
 
       // Send next command after delay
       Future.delayed(const Duration(milliseconds: 50), () {
         _sendNextInitCommand();
       });
     }
-
-    notifyListeners();
+    // During keepalive: don't notify just for debug messages
   }
 
   /// Connect to device
@@ -148,7 +150,7 @@ class ConnectionProvider extends ChangeNotifier {
       notifyListeners();
 
       // Send handshake
-      final handshake = _initializer.getHandshakeCommand();
+      final handshake = TRacksProto.handshakeCommand;
       _socketService.send(handshake);
       _initializer.markCommandSent();
 

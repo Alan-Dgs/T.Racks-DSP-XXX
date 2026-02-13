@@ -3,16 +3,19 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 // Services
-import 'services/socket_service.dart';
-import 'services/protocol_service.dart';
+import 'devices/t_racks408/services/socket_service.dart';
+import 'devices/t_racks408/services/protocol_service.dart';
 
 // Providers
-import 'providers/device_provider.dart';
-import 'providers/connection_provider.dart';
+import 'devices/t_racks408/providers/device_provider.dart';
+import 'devices/t_racks408/providers/connection_provider.dart';
 
 // Widgets
-import 'widgets/gain_tab.dart';
-import 'widgets/matrix_tab.dart';
+import 'devices/t_racks408/widgets/gain_tab.dart';
+import 'devices/t_racks408/widgets/matrix_tab.dart';
+
+// Overlays
+import 'devices/t_racks408/overlays/settings_overlay.dart';
 
 void main() {
   runApp(
@@ -265,12 +268,39 @@ class _MyHomePageState extends State<MyHomePage> {
       }
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final narrow = screenWidth < 500;
+
     return DefaultTabController(
       length: _tabs.length,
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
           title: Text(widget.title),
+          actions: narrow
+              ? [
+                  IconButton(
+                    icon: Icon(_showConnect ? Icons.link_off : Icons.link,
+                        size: 20),
+                    tooltip: 'Connection',
+                    onPressed: () =>
+                        setState(() => _showConnect = !_showConnect),
+                  ),
+                  IconButton(
+                    icon: Icon(_showDebug ? Icons.bug_report : Icons.bug_report_outlined,
+                        size: 20),
+                    tooltip: 'Debug',
+                    onPressed: () =>
+                        setState(() => _showDebug = !_showDebug),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings, size: 20),
+                    tooltip: 'Settings',
+                    onPressed: () => SettingsOverlay.showSettingsOverlay(
+                        context, context.read<SocketService>()),
+                  ),
+                ]
+              : null,
           bottom: TabBar(
             isScrollable: true,
             tabs: _tabs.map((name) => Tab(text: name)).toList(),
@@ -316,102 +346,182 @@ class _MyHomePageState extends State<MyHomePage> {
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      Row(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final narrow = constraints.maxWidth < 500;
+                      return Column(
                         children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _ipController,
-                              decoration: const InputDecoration(
-                                labelText: 'IP Address',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 100,
-                            child: TextField(
-                              controller: _portController,
-                              decoration: const InputDecoration(
-                                labelText: 'Port',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: connectionProvider.isSocketConnected
-                                ? null
-                                : _connect,
-                            child: const Text('Connect'),
-                          ),
-                          const SizedBox(width: 4),
-                          ElevatedButton(
-                            onPressed: connectionProvider.isSocketConnected
-                                ? _disconnect
-                                : null,
-                            child: const Text('Disconnect'),
-                          ),
-                        ],
-                      ),
-                      // Inner control panel, used for Gain, Comp, etc.
-                      if (connectionProvider.isConnected)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: DropdownButton<int>(
-                                  value: _selectedPreset != null
-                                      ? int.tryParse(_selectedPreset!)
-                                      : null,
-                                  hint: const Text('Select Preset'),
-                                  isExpanded: true,
-                                  items: deviceProvider.presets.entries
-                                      .map((entry) {
-                                    final label =
-                                        'U${(entry.key + 1).toString().padLeft(2, '0')}';
-                                    return DropdownMenuItem<int>(
-                                      value: entry.key,
-                                      child: Text('$label: ${entry.value}'),
-                                    );
-                                  }).toList()
-                                    ..sort(
-                                        (a, b) => a.value!.compareTo(b.value!)),
-                                  onChanged: (value) => setState(
-                                      () => _selectedPreset = value?.toString()),
+                          if (narrow) ...[
+                            // Stacked layout for narrow screens
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _ipController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'IP Address',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                  ),
                                 ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 80,
+                                  child: TextField(
+                                    controller: _portController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Port',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: connectionProvider.isSocketConnected
+                                        ? null
+                                        : _connect,
+                                    child: const Text('Connect'),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: connectionProvider.isSocketConnected
+                                        ? _disconnect
+                                        : null,
+                                    child: const Text('Disconnect'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ] else ...[
+                            // Wide layout for desktop
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _ipController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'IP Address',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 100,
+                                  child: TextField(
+                                    controller: _portController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Port',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: connectionProvider.isSocketConnected
+                                      ? null
+                                      : _connect,
+                                  child: const Text('Connect'),
+                                ),
+                                const SizedBox(width: 4),
+                                ElevatedButton(
+                                  onPressed: connectionProvider.isSocketConnected
+                                      ? _disconnect
+                                      : null,
+                                  child: const Text('Disconnect'),
+                                ),
+                              ],
+                            ),
+                          ],
+                          // Inner control panel, used for Gain, Comp, etc.
+                          if (connectionProvider.isConnected)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: DropdownButton<int>(
+                                      value: _selectedPreset != null
+                                          ? int.tryParse(_selectedPreset!)
+                                          : null,
+                                      hint: const Text('Select Preset'),
+                                      isExpanded: true,
+                                      items: deviceProvider.presets.entries
+                                          .map((entry) {
+                                        final label =
+                                            'U${(entry.key + 1).toString().padLeft(2, '0')}';
+                                        return DropdownMenuItem<int>(
+                                          value: entry.key,
+                                          child: Text('$label: ${entry.value}'),
+                                        );
+                                      }).toList()
+                                        ..sort(
+                                            (a, b) => a.value!.compareTo(b.value!)),
+                                      onChanged: (value) => setState(
+                                          () => _selectedPreset = value?.toString()),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton(
+                                    onPressed: _selectedPreset != null
+                                        ? () {
+                                            final index = int.tryParse(_selectedPreset!);
+                                            if (index != null) {
+                                              context.read<ConnectionProvider>().loadPreset(index);
+                                            }
+                                          }
+                                        : null,
+                                    child: const Text('Load', style: TextStyle(fontSize: 12)),
+                                  ),
+                                  if (!narrow) ...[
+                                    const SizedBox(width: 16),
+                                    const Icon(Icons.music_note,
+                                        color: Color(0xFFA6E22E)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Current: ${deviceProvider.currentPreset}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                  ],
+                                ],
                               ),
-                              const SizedBox(width: 8),
-                              ElevatedButton(
-                                onPressed: _selectedPreset != null
-                                    ? () {
-                                        final index = int.tryParse(_selectedPreset!);
-                                        if (index != null) {
-                                          context.read<ConnectionProvider>().loadPreset(index);
-                                        }
-                                      }
-                                    : null,
-                                child: const Text('Load', style: TextStyle(fontSize: 12)),
+                            ),
+                          if (connectionProvider.isConnected && narrow)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.music_note,
+                                      color: Color(0xFFA6E22E), size: 16),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      'Current: ${deviceProvider.currentPreset}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold, fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 16),
-                              const Icon(Icons.music_note,
-                                  color: Color(0xFFA6E22E)),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Current: ${deviceProvider.currentPreset}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -546,36 +656,44 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
               ),
 
-            // Bottom controls
-            Padding(
-              padding: const EdgeInsets.all(4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () =>
-                        setState(() => _showConnect = !_showConnect),
-                    icon: Icon(
-                        _showConnect
-                            ? Icons.keyboard_arrow_up
-                            : Icons.keyboard_arrow_down,
-                        size: 18),
-                    label:
-                        const Text('Connection', style: TextStyle(fontSize: 12)),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () =>
-                        setState(() => _showDebug = !_showDebug),
-                    icon: Icon(
-                        _showDebug
-                            ? Icons.keyboard_arrow_up
-                            : Icons.keyboard_arrow_down,
-                        size: 18),
-                    label: const Text('Debug', style: TextStyle(fontSize: 12)),
-                  ),
-                ],
+            // Bottom controls (desktop only — on mobile these are in the app bar)
+            if (!narrow)
+              Padding(
+                padding: const EdgeInsets.all(4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () =>
+                          setState(() => _showConnect = !_showConnect),
+                      icon: Icon(
+                          _showConnect
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          size: 18),
+                      label: const Text('Connection',
+                          style: TextStyle(fontSize: 12)),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () =>
+                          setState(() => _showDebug = !_showDebug),
+                      icon: Icon(
+                          _showDebug
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          size: 18),
+                      label: const Text('Debug',
+                          style: TextStyle(fontSize: 12)),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () => SettingsOverlay.showSettingsOverlay(context, context.read<SocketService>()),
+                      icon: const Icon(Icons.settings, size: 18),
+                      label: const Text('Settings',
+                          style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),
