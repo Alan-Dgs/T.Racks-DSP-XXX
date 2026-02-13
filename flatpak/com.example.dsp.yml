@@ -1,0 +1,28 @@
+app-id: com.example.dsp
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: dsp
+
+finish-args:
+  - --share=ipc
+  - --share=network          # TCP socket to DSP device
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri              # GPU acceleration
+
+modules:
+  - name: dsp
+    buildsystem: simple
+    build-commands:
+      - cp -r bundle /app/dsp
+      - chmod +x /app/dsp/dsp
+      - mkdir -p /app/bin
+      - ln -s /app/dsp/dsp /app/bin/dsp
+      - install -Dm644 com.example.dsp.desktop /app/share/applications/com.example.dsp.desktop
+    sources:
+      - type: dir
+        path: ../build/linux/bundle
+        dest: bundle
+      - type: file
+        path: com.example.dsp.desktop

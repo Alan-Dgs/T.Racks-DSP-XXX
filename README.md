@@ -51,17 +51,33 @@ functionality over a wide array of platforms.
 
 ## Getting Started
 
-### Building an .exe file
-0. Ensure that Flutter is installed on your computer. If you're running Windows, you will need to ensure that `flutter` is installed and on your `$PATH`. You will need:
-    - Flutter - 3.38.9
-    - Dart - 3.10.8
-1. Run setup:
+### Prerequisites
+Ensure that Flutter is installed on your computer and available on your `$PATH`. You will need:
+- Flutter - 3.38.9
+- Dart - 3.10.8
+
+Run setup:
 ```
 $ make setup
 ```
-2. Build the project:
+
+### Building for Windows (.exe)
 ```
 $ make build-windows
 ```
-3. Run the `.exe` file generated at `./build/
-4. Connect your DSP to your local network. Input the IP address of the DSP in the field.
+The `.exe` will be at `./build/windows/x64/runner/Release/`.
+
+### Building for Linux
+```
+$ make build-linux
+```
+The executable will be at `./build/linux/x64/release/bundle/`.
+
+### Building for Android (.apk)
+```
+$ make build-android
+```
+The `.apk` will be at `./build/app/outputs/flutter-apk/app-release.apk`.
+
+### Running
+Connect your DSP to your local network. Launch the app and input the IP address of the DSP in the field.

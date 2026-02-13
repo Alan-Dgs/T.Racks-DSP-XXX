@@ -16,37 +16,43 @@ jobs:
             os: ubuntu-latest
             build-cmd: flutter build apk --release
             artifact-path: build/app/outputs/flutter-apk/app-release.apk
-            artifact-name: app-android
+            artifact-name: dsp-android
+
+          - platform: web
+            os: ubuntu-latest
+            build-cmd: flutter build web --release
+            artifact-path: build/web
+            artifact-name: dsp-web
 
           - platform: windows
             os: windows-latest
             build-cmd: flutter build windows --release
             artifact-path: build/windows/x64/runner/Release
-            artifact-name: app-windows
+            artifact-name: dsp-windows
 
           - platform: linux-x64
             os: ubuntu-latest
             build-cmd: flutter build linux --release
             artifact-path: build/linux/x64/release/bundle
-            artifact-name: app-linux-x64
+            artifact-name: dsp-linux-x64
 
           - platform: linux-arm64
             os: ubuntu-24.04-arm
             build-cmd: flutter build linux --release
             artifact-path: build/linux/arm64/release/bundle
-            artifact-name: app-linux-arm64
+            artifact-name: dsp-linux-arm64
 
           - platform: macos   # macOS also won't be signed/notarized without extra steps
             os: macos-latest
             build-cmd: flutter build macos --release
             artifact-path: build/macos/Build/Products/Release
-            artifact-name: app-macos
+            artifact-name: dsp-macos
 
           - platform: ios   # iOS uses --no-codesign since CI won't have your signing certs. For real distribution you'd need to set up code signing with match/fastlane
             os: macos-latest
             build-cmd: flutter build ios --release --no-codesign
             artifact-path: build/ios/iphoneos/Runner.app
-            artifact-name: app-ios
+            artifact-name: dsp-ios
 
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.platform }}
@@ -86,3 +92,54 @@ jobs:
         with:
           name: ${{ matrix.artifact-name }}
           path: ${{ matrix.artifact-path }}
+
+  flatpak:
+    needs: build  # reuses the linux bundle artifacts
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: ubuntu-latest
+            bundle-artifact: dsp-linux-x64
+            bundle-path: build/linux/x64/release/bundle
+            artifact-name: dsp-linux-flatpak-x64
+
+          - arch: arm64
+            os: ubuntu-24.04-arm
+            bundle-artifact: dsp-linux-arm64
+            bundle-path: build/linux/arm64/release/bundle
+            artifact-name: dsp-linux-flatpak-arm64
+
+    runs-on: ${{ matrix.os }}
+    name: linux-flatpak-${{ matrix.arch }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Linux bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.bundle-artifact }}
+          path: ${{ matrix.bundle-path }}
+
+      - name: Symlink bundle to arch-neutral path
+        run: ln -s $(pwd)/${{ matrix.bundle-path }} build/linux/bundle
+
+      - name: Install Flatpak and flatpak-builder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install -y flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+
+      - name: Build Flatpak
+        run: |
+          flatpak-builder --force-clean --repo=flatpak-repo flatpak-build flatpak/com.example.dsp.yml
+          flatpak build-bundle flatpak-repo dsp.flatpak com.example.dsp
+
+      - name: Upload Flatpak artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: dsp.flatpak
