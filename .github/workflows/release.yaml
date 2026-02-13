@@ -69,6 +69,7 @@ jobs:
           branch: main
           workflow_conclusion: success
           path: artifacts
+          skip_unpack: true
 
       - name: Create tag
         if: steps.check.outputs.exists == 'false' && steps.compare.outputs.valid == 'true'
@@ -83,4 +84,4 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
           generate_release_notes: true
-          files: artifacts/**/*
+          files: artifacts/*.zip
