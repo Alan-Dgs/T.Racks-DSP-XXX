@@ -12,6 +12,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'protocol.dart';
+import 'providers/device_provider.dart';
 import 'services/protocol_service.dart';
 
 /// Parses channel configuration from 0x24 response chunks.
@@ -27,11 +28,17 @@ class ChannelConfigParser {
   final Map<String, double> _channelGains = {};
   final Map<String, int> _matrixRouting = {};
   final Map<String, List<double>> _geqBands = {};
+  final Map<String, List<PeqBand>> _peqBands = {};
+  final Map<String, FilterState> _hiPass = {};
+  final Map<String, FilterState> _loPass = {};
   String _currentPreset = 'Unknown';
 
   Map<String, double> get channelGains => Map.unmodifiable(_channelGains);
   Map<String, int> get matrixRouting => Map.unmodifiable(_matrixRouting);
   Map<String, List<double>> get geqBands => Map.unmodifiable(_geqBands);
+  Map<String, List<PeqBand>> get peqBands => Map.unmodifiable(_peqBands);
+  Map<String, FilterState> get hiPass => Map.unmodifiable(_hiPass);
+  Map<String, FilterState> get loPass => Map.unmodifiable(_loPass);
   // ignore: unnecessary_getters_setters
   String get currentPreset => _currentPreset;
   // ignore: unnecessary_getters_setters
@@ -42,6 +49,9 @@ class ChannelConfigParser {
     _channelGains.clear();
     _matrixRouting.clear();
     _geqBands.clear();
+    _peqBands.clear();
+    _hiPass.clear();
+    _loPass.clear();
     _currentPreset = 'Unknown';
   }
 
@@ -210,6 +220,83 @@ class ChannelConfigParser {
       _geqBands[input] = bands;
       debugPrint('Config: $input GEQ loaded (${bands.where((v) => v != 0.0).length} non-zero bands)');
     }
+
+    // Extract PEQ bands for input channels.
+    // Each input has 8 PEQ bands × 6 bytes at channelOffset + 78 (after 16-byte header + 62-byte GEQ).
+    // Band format: [gain_lo] [gain_hi] [freq_lo] [freq_hi] [Q] [type]
+    for (final input in ['In A', 'In B', 'In C', 'In D']) {
+      final offset = channelOffsets[input];
+      if (offset == null) continue;
+
+      final peqStart = offset + 78; // 16 header + 62 GEQ
+      final peqEnd = peqStart + 8 * 6;
+      if (peqEnd > stream.length) continue;
+
+      final bands = <PeqBand>[];
+      for (int b = 0; b < 8; b++) {
+        final pos = peqStart + b * 6;
+        bands.add(_parsePeqBand(stream, pos));
+      }
+      _peqBands[input] = bands;
+      debugPrint('Config: $input PEQ loaded (${bands.where((b) => b.gainDb != 0.0).length} non-zero bands)');
+
+      // Input filter data: 6 bytes after PEQ bands
+      // [HPF freq LE16] [LPF freq LE16] [00] [00]
+      final filterStart = peqEnd;
+      if (filterStart + 4 <= stream.length) {
+        final hpfFreq = stream[filterStart] | (stream[filterStart + 1] << 8);
+        final lpfFreq = stream[filterStart + 2] | (stream[filterStart + 3] << 8);
+        _hiPass[input] = FilterState(freqRaw: hpfFreq, enabled: hpfFreq > 0);
+        _loPass[input] = FilterState(freqRaw: lpfFreq);
+        debugPrint('Config: $input HPF=$hpfFreq LPF=$lpfFreq');
+      }
+    }
+
+    // Extract PEQ bands for output channels.
+    // Each output has 9 PEQ bands × 6 bytes at channelOffset + 18 (after 18-byte header).
+    for (final output in ['Out 1', 'Out 2', 'Out 3', 'Out 4',
+                           'Out 5', 'Out 6', 'Out 7', 'Out 8']) {
+      final offset = channelOffsets[output];
+      if (offset == null) continue;
+
+      final peqStart = offset + 18; // 18-byte header
+      final peqEnd = peqStart + 9 * 6;
+      if (peqEnd > stream.length) continue;
+
+      final bands = <PeqBand>[];
+      for (int b = 0; b < 9; b++) {
+        final pos = peqStart + b * 6;
+        bands.add(_parsePeqBand(stream, pos));
+      }
+      _peqBands[output] = bands;
+      debugPrint('Config: $output PEQ loaded (${bands.where((b) => b.gainDb != 0.0).length} non-zero bands)');
+
+      // Output filter data: after PEQ bands at peqEnd
+      // Bytes 0-1: HPF freq LE16, bytes 2-3: unknown, bytes 4-7: unknown,
+      // bytes 8-9: LPF freq LE16 (from pattern analysis)
+      if (peqEnd + 10 <= stream.length) {
+        final hpfFreq = stream[peqEnd] | (stream[peqEnd + 1] << 8);
+        final lpfFreq = stream[peqEnd + 8] | (stream[peqEnd + 9] << 8);
+        _hiPass[output] = FilterState(freqRaw: hpfFreq, enabled: hpfFreq > 0);
+        _loPass[output] = FilterState(freqRaw: lpfFreq);
+        debugPrint('Config: $output HPF=$hpfFreq LPF=$lpfFreq');
+      }
+    }
+  }
+
+  /// Parse a single PEQ band from 6 bytes in the stream.
+  static PeqBand _parsePeqBand(List<int> stream, int pos) {
+    final gainRaw = stream[pos] | (stream[pos + 1] << 8);
+    final freqRaw = stream[pos + 2] | (stream[pos + 3] << 8);
+    final qRaw = stream[pos + 4];
+    final type = stream[pos + 5];
+    final gainDb = (gainRaw - 120) / 10.0;
+    return PeqBand(
+      freqRaw: freqRaw,
+      qRaw: qRaw,
+      gainDb: gainDb.clamp(-12.0, 12.0),
+      type: type.clamp(0, 8),
+    );
   }
 
   /// Build a load preset command for the given preset index (0-based).

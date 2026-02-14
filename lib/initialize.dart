@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 
 import 'devices/t_racks408/load_preset.dart';
 import 'devices/t_racks408/protocol.dart';
+import 'devices/t_racks408/providers/device_provider.dart';
 
 class DSPInitializer extends ChangeNotifier {
   // Command queue for automated preset retrieval
@@ -47,6 +48,9 @@ class DSPInitializer extends ChangeNotifier {
   Map<String, double> get channelGains => _configParser.channelGains;
   Map<String, int> get matrixRouting => _configParser.matrixRouting;
   Map<String, List<double>> get geqBands => _configParser.geqBands;
+  Map<String, List<PeqBand>> get peqBands => _configParser.peqBands;
+  Map<String, FilterState> get hiPass => _configParser.hiPass;
+  Map<String, FilterState> get loPass => _configParser.loPass;
 
   /// Reset the initialization state
   void reset() {

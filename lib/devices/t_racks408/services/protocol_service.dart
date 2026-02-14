@@ -3,6 +3,8 @@
 // Handles encoding and decoding of DSP408 protocol messages.
 // Includes command building, checksum calculation, and message parsing.
 
+import 'dart:math' as math;
+
 /// Types of protocol messages
 enum MessageType {
   handshake,
@@ -122,7 +124,8 @@ class ProtocolService {
     for (int ch = 0; ch < 12; ch++) {
       final offset = 6 + ch * 3;
       final linear = decodeFloat16(data[offset], data[offset + 1]);
-      levels.add(linear);
+      // DSP returns 0xFF 0xFF (NaN) for channels during PEQ recalculation
+      levels.add(linear.isFinite ? linear : 0.0);
     }
     return levels;
   }
@@ -298,6 +301,127 @@ class ProtocolService {
     'In C': 0x04,
     'In D': 0x08,
   };
+
+  // ─── PEQ ───
+
+  /// PEQ frequency encoding: log scale from 19.70 Hz to 20160 Hz over 1000 steps.
+  /// freq_hz = 19.70 * (20160/19.70)^(raw/1000)
+  static const double _peqMinFreq = 19.70;
+  static const double _peqMaxFreq = 20160.0;
+  static const double _peqFreqRatio = _peqMaxFreq / _peqMinFreq;
+  static const int _peqFreqSteps = 1000;
+
+  /// Convert PEQ raw frequency value to Hz
+  double peqFreqToHz(int raw) {
+    if (raw <= 0) return _peqMinFreq;
+    if (raw >= _peqFreqSteps) return _peqMaxFreq;
+    return _peqMinFreq * math.pow(_peqFreqRatio, raw / _peqFreqSteps);
+  }
+
+  /// Convert Hz to PEQ raw frequency value
+  int peqHzToFreq(double hz) {
+    if (hz <= _peqMinFreq) return 0;
+    if (hz >= _peqMaxFreq) return _peqFreqSteps;
+    return (math.log(hz / _peqMinFreq) / math.log(_peqFreqRatio) * _peqFreqSteps).round().clamp(0, _peqFreqSteps);
+  }
+
+  /// PEQ Q encoding: log scale from 0.40 to 128.00 over 255 steps.
+  double peqRawToQ(int raw) {
+    if (raw <= 0) return 0.40;
+    if (raw >= 255) return 128.0;
+    return 0.40 * math.pow(320.0, raw / 255.0); // 320 = 128.0/0.40
+  }
+
+  int peqQToRaw(double q) {
+    if (q <= 0.40) return 0;
+    if (q >= 128.0) return 255;
+    return (math.log(q / 0.40) / math.log(320.0) * 255.0).round().clamp(0, 255);
+  }
+
+  /// PEQ gain: same encoding as GEQ (0-240, dB = (value-120)/10.0)
+  double peqGainToDb(int value) => (value - 120) / 10.0;
+  int peqDbToGain(double dB) => (dB * 10 + 120).round().clamp(0, 240);
+
+  /// PEQ filter types
+  static const peqTypeNames = [
+    'Peak', 'Low Shelf', 'High Shelf',
+    'LP -6dB', 'LP -12dB', 'HP -6dB', 'HP -12dB',
+    'All Pass 1', 'All Pass 2',
+  ];
+
+  /// Hi/Lo Pass crossover slope types
+  static const crossoverSlopeNames = [
+    'BW -6', 'BW -12', 'BW -18', 'BW -24', 'BW -30', 'BW -36', 'BW -42', 'BW -48',
+    'LR -12', 'LR -24', 'LR -36', 'LR -48',
+    'BS -6', 'BS -12', 'BS -18', 'BS -24', 'BS -30', 'BS -36', 'BS -42', 'BS -48',
+  ];
+
+  /// Build PEQ band command (cmd 0x33)
+  ///
+  /// Protocol: `10 02 00 01 0a 33 [ch] [band] [gain] [00] [freq_lo] [freq_hi] [Q] [type] [bypass] 10 03 [chk]`
+  List<int> buildPeqBandCommand(String channel, int band, {
+    required double gainDb,
+    required int freqRaw,
+    required int qRaw,
+    required int type,
+    required bool bypass,
+  }) {
+    const channelMap = {
+      'In A': 0x00, 'In B': 0x01, 'In C': 0x02, 'In D': 0x03,
+      'Out 1': 0x04, 'Out 2': 0x05, 'Out 3': 0x06, 'Out 4': 0x07,
+      'Out 5': 0x08, 'Out 6': 0x09, 'Out 7': 0x0A, 'Out 8': 0x0B,
+    };
+    final ch = channelMap[channel];
+    if (ch == null) throw ArgumentError('Invalid PEQ channel: $channel');
+
+    final gain = peqDbToGain(gainDb);
+    final freqLo = freqRaw & 0xFF;
+    final freqHi = (freqRaw >> 8) & 0xFF;
+
+    final dataBytes = [0x00, 0x01, 0x0a, 0x33, ch, band, gain, 0x00, freqLo, freqHi, qRaw & 0xFF, type, bypass ? 1 : 0];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Build Hi Pass filter command (cmd 0x32)
+  ///
+  /// Protocol: `10 02 00 01 05 32 [ch] [freq_lo] [freq_hi] [enable] 10 03 [chk]`
+  List<int> buildHiPassCommand(String channel, int freqRaw, bool enable) {
+    const channelMap = {
+      'In A': 0x00, 'In B': 0x01, 'In C': 0x02, 'In D': 0x03,
+      'Out 1': 0x04, 'Out 2': 0x05, 'Out 3': 0x06, 'Out 4': 0x07,
+      'Out 5': 0x08, 'Out 6': 0x09, 'Out 7': 0x0A, 'Out 8': 0x0B,
+    };
+    final ch = channelMap[channel];
+    if (ch == null) throw ArgumentError('Invalid channel: $channel');
+
+    final freqLo = freqRaw & 0xFF;
+    final freqHi = (freqRaw >> 8) & 0xFF;
+
+    final dataBytes = [0x00, 0x01, 0x05, 0x32, ch, freqLo, freqHi, enable ? 1 : 0];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Build Lo Pass filter command (cmd 0x31)
+  ///
+  /// Protocol: `10 02 00 01 05 31 [ch] [freq_lo] [freq_hi] [slope] 10 03 [chk]`
+  List<int> buildLoPassCommand(String channel, int freqRaw, int slope) {
+    const channelMap = {
+      'In A': 0x00, 'In B': 0x01, 'In C': 0x02, 'In D': 0x03,
+      'Out 1': 0x04, 'Out 2': 0x05, 'Out 3': 0x06, 'Out 4': 0x07,
+      'Out 5': 0x08, 'Out 6': 0x09, 'Out 7': 0x0A, 'Out 8': 0x0B,
+    };
+    final ch = channelMap[channel];
+    if (ch == null) throw ArgumentError('Invalid channel: $channel');
+
+    final freqLo = freqRaw & 0xFF;
+    final freqHi = (freqRaw >> 8) & 0xFF;
+
+    final dataBytes = [0x00, 0x01, 0x05, 0x31, ch, freqLo, freqHi, slope];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
 
   /// Build keepalive command
   List<int> buildKeepaliveCommand() {

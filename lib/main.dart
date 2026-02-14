@@ -14,9 +14,14 @@ import 'devices/t_racks408/providers/connection_provider.dart';
 import 'devices/t_racks408/widgets/gain_tab.dart';
 import 'devices/t_racks408/widgets/geq_tab.dart';
 import 'devices/t_racks408/widgets/matrix_tab.dart';
+import 'devices/t_racks408/widgets/peq_tab.dart';
+import 'devices/t_racks408/widgets/rta_tab.dart';
 
 // Overlays
 import 'devices/t_racks408/overlays/settings_overlay.dart';
+
+// RTA
+import 'services/rta_settings_provider.dart';
 
 void main() {
   runApp(
@@ -25,6 +30,7 @@ void main() {
         // Services (singletons)
         ChangeNotifierProvider(create: (_) => SocketService()),
         Provider(create: (_) => ProtocolService()),
+        ChangeNotifierProvider(create: (_) => RtaSettingsProvider()),
 
         // State providers
         ChangeNotifierProxyProvider<SocketService, DeviceProvider>(
@@ -191,7 +197,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String? _lastSyncedPreset;
 
   static const _tabs = [
-    'Gain', 'Gate', 'Comp', 'Limit', 'Delay', 'Matrix', 'GEQ', 'PEQ'
+    'Gain', 'Gate', 'Comp', 'Limit', 'Delay', 'Matrix', 'GEQ', 'PEQ', 'RTA'
   ];
 
   @override
@@ -282,7 +288,7 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     // Auto-scroll debug log when at the top and new messages arrive
-    final messageCount = connectionProvider.receivedMessages.length;
+    final messageCount = connectionProvider.debugEntries.length;
     if (messageCount != _lastMessageCount) {
       _lastMessageCount = messageCount;
       if (_debugAtTop && _debugScrollController.hasClients) {
@@ -603,6 +609,12 @@ class _MyHomePageState extends State<MyHomePage> {
                       if (name == 'GEQ') {
                         return GeqTab(deviceProvider: deviceProvider);
                       }
+                      if (name == 'PEQ') {
+                        return PeqTab(deviceProvider: deviceProvider);
+                      }
+                      if (name == 'RTA') {
+                        return const RtaTab();
+                      }
                       return Center(child: Text('$name Tab'));
                     }).toList(),
                   ),
@@ -670,16 +682,27 @@ class _MyHomePageState extends State<MyHomePage> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Checkbox(
-                                    value: _showTimestamps,
-                                    onChanged: (v) => setState(
-                                        () => _showTimestamps = v ?? false),
-                                    materialTapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                    visualDensity: VisualDensity.compact,
+                                  _debugCheckbox(
+                                    value: connectionProvider.showRx,
+                                    label: 'Rx',
+                                    onChanged: () => connectionProvider.toggleShowRx(),
                                   ),
-                                  const Text('Time',
-                                      style: TextStyle(fontSize: 11)),
+                                  _debugCheckbox(
+                                    value: connectionProvider.showTx,
+                                    label: 'Tx',
+                                    onChanged: () => connectionProvider.toggleShowTx(),
+                                  ),
+                                  _debugCheckbox(
+                                    value: connectionProvider.showDecoded,
+                                    label: 'Decode',
+                                    onChanged: () => connectionProvider.toggleShowDecoded(),
+                                  ),
+                                  _debugCheckbox(
+                                    value: _showTimestamps,
+                                    label: 'Time',
+                                    onChanged: () => setState(
+                                        () => _showTimestamps = !_showTimestamps),
+                                  ),
                                 ],
                               ),
                             ),
@@ -697,15 +720,13 @@ class _MyHomePageState extends State<MyHomePage> {
                           controller: _debugScrollController,
                           reverse: true,
                           itemCount:
-                              connectionProvider.receivedMessages.length,
+                              connectionProvider.debugEntries.length,
                           itemBuilder: (context, index) {
-                            final msg =
-                                connectionProvider.receivedMessages[index];
-                            final timestamps =
-                                connectionProvider.messageTimestamps;
-                            final display = _showTimestamps &&
-                                    index < timestamps.length
-                                ? '[${timestamps[index].toStringAsFixed(4)}] $msg'
+                            final entry =
+                                connectionProvider.debugEntries[index];
+                            final msg = entry.display(connectionProvider.showDecoded);
+                            final display = _showTimestamps
+                                ? '[${entry.timestamp.toStringAsFixed(4)}] $msg'
                                 : msg;
                             return Padding(
                               padding: const EdgeInsets.symmetric(
@@ -767,4 +788,22 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  Widget _debugCheckbox({
+    required bool value,
+    required String label,
+    required VoidCallback onChanged,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Checkbox(
+          value: value,
+          onChanged: (_) => onChanged(),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+        Text(label, style: const TextStyle(fontSize: 11)),
+      ],
+    );
+  }
 }

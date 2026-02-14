@@ -9,6 +9,44 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/socket_service.dart';
 import '../services/protocol_service.dart';
 
+/// State for a single PEQ band
+class PeqBand {
+  int freqRaw;   // LE16 raw protocol value
+  int qRaw;      // Raw Q byte
+  double gainDb;  // -12.0 to +12.0 dB
+  int type;      // 0-8 (Peak, Low Shelf, etc.)
+  bool bypass;
+
+  PeqBand({
+    this.freqRaw = 120,
+    this.qRaw = 35,
+    this.gainDb = 0.0,
+    this.type = 0,
+    this.bypass = false,
+  });
+
+  PeqBand copy() => PeqBand(
+    freqRaw: freqRaw,
+    qRaw: qRaw,
+    gainDb: gainDb,
+    type: type,
+    bypass: bypass,
+  );
+}
+
+/// State for a Hi/Lo Pass filter
+class FilterState {
+  int freqRaw;   // LE16 raw protocol value
+  int slope;     // 0-19 (crossover slope type)
+  bool enabled;
+
+  FilterState({
+    this.freqRaw = 0,
+    this.slope = 0,
+    this.enabled = false,
+  });
+}
+
 class DeviceProvider extends ChangeNotifier {
   final SocketService _socketService;
   final ProtocolService _protocolService;
@@ -93,6 +131,32 @@ class DeviceProvider extends ChangeNotifier {
     'In D': List.filled(31, 0.0),
   };
 
+  // PEQ bands: parametric EQ per channel
+  // Inputs have 8 bands (0-7), Outputs have 9 bands (0-8)
+  // Each band: {freq: int(raw), q: int(raw), gain: double(dB), type: int(0-8), bypass: bool}
+  final Map<String, List<PeqBand>> _peqBands = {
+    for (final ch in ['In A', 'In B', 'In C', 'In D'])
+      ch: List.generate(8, (_) => PeqBand()),
+    for (final ch in ['Out 1', 'Out 2', 'Out 3', 'Out 4', 'Out 5', 'Out 6', 'Out 7', 'Out 8'])
+      ch: List.generate(9, (_) => PeqBand()),
+  };
+
+  // Hi Pass filter per channel
+  final Map<String, FilterState> _hiPass = {
+    for (final ch in ['In A', 'In B', 'In C', 'In D',
+                       'Out 1', 'Out 2', 'Out 3', 'Out 4',
+                       'Out 5', 'Out 6', 'Out 7', 'Out 8'])
+      ch: FilterState(),
+  };
+
+  // Lo Pass filter per channel
+  final Map<String, FilterState> _loPass = {
+    for (final ch in ['In A', 'In B', 'In C', 'In D',
+                       'Out 1', 'Out 2', 'Out 3', 'Out 4',
+                       'Out 5', 'Out 6', 'Out 7', 'Out 8'])
+      ch: FilterState(),
+  };
+
   // Channel aliases
   final Map<String, String> _channelAliases = {};
 
@@ -103,6 +167,10 @@ class DeviceProvider extends ChangeNotifier {
   // GEQ throttle (50ms per channel+band key)
   final Map<String, double> _pendingGeq = {};
   final Map<String, Timer> _geqTimers = {};
+
+  // PEQ throttle (50ms per channel+band key)
+  final Map<String, PeqBand> _pendingPeq = {};
+  final Map<String, Timer> _peqTimers = {};
 
   // Meter levels (linear float values, 0.0 = silence)
   // Channel order matches protocol: In A, In B, In C, In D, Out 1-8
@@ -241,6 +309,136 @@ class DeviceProvider extends ChangeNotifier {
   void setAllGeqBands(String channel, List<double> values) {
     if (values.length != 31) return;
     _geqBands[channel] = values.map((v) => v.clamp(-12.0, 12.0)).toList();
+    notifyListeners();
+  }
+
+  // ─── PEQ ───
+
+  /// Get the number of PEQ bands for a channel (8 for inputs, 9 for outputs)
+  int getPeqBandCount(String channel) => _peqBands[channel]?.length ?? 0;
+
+  /// Get all PEQ bands for a channel
+  List<PeqBand> getPeqBands(String channel) =>
+      (_peqBands[channel] ?? []).map((b) => b.copy()).toList();
+
+  /// Get a single PEQ band
+  PeqBand getPeqBand(String channel, int band) =>
+      (_peqBands[channel] ?? [])[band].copy();
+
+  /// Get Hi Pass filter state
+  FilterState getHiPass(String channel) => _hiPass[channel] ?? FilterState();
+
+  /// Get Lo Pass filter state
+  FilterState getLoPass(String channel) => _loPass[channel] ?? FilterState();
+
+  /// Set a PEQ band parameter and send to device (throttled 50ms per channel+band)
+  void setPeqBand(String channel, int band, {
+    double? gainDb,
+    int? freqRaw,
+    int? qRaw,
+    int? type,
+    bool? bypass,
+  }) {
+    final bands = _peqBands[channel];
+    if (bands == null || band < 0 || band >= bands.length) return;
+
+    final b = bands[band];
+    if (gainDb != null) b.gainDb = gainDb.clamp(-12.0, 12.0);
+    if (freqRaw != null) b.freqRaw = freqRaw.clamp(0, 1000);
+    if (qRaw != null) b.qRaw = qRaw.clamp(0, 255);
+    if (type != null) b.type = type.clamp(0, 8);
+    if (bypass != null) b.bypass = bypass;
+    notifyListeners();
+
+    if (!_socketService.isConnected) return;
+
+    final key = 'peq:$channel:$band';
+    _pendingPeq[key] = b.copy();
+    if (!_peqTimers.containsKey(key)) {
+      _peqTimers[key] = Timer(const Duration(milliseconds: 50), () {
+        _peqTimers.remove(key);
+        final pending = _pendingPeq.remove(key);
+        if (pending != null) {
+          final command = _protocolService.buildPeqBandCommand(
+            channel, band,
+            gainDb: pending.gainDb,
+            freqRaw: pending.freqRaw,
+            qRaw: pending.qRaw,
+            type: pending.type,
+            bypass: pending.bypass,
+          );
+          _socketService.enqueue(command);
+        }
+      });
+    }
+  }
+
+  /// Set Hi Pass filter and send to device
+  void setHiPass(String channel, {int? freqRaw, bool? enabled, int? slope}) {
+    final state = _hiPass[channel];
+    if (state == null) return;
+    if (freqRaw != null) state.freqRaw = freqRaw.clamp(0, 1000);
+    if (enabled != null) state.enabled = enabled;
+    if (slope != null) state.slope = slope.clamp(0, 19);
+    notifyListeners();
+
+    if (!_socketService.isConnected) return;
+    final command = _protocolService.buildHiPassCommand(channel, state.freqRaw, state.enabled);
+    _socketService.enqueue(command);
+  }
+
+  /// Set Lo Pass filter and send to device
+  void setLoPass(String channel, {int? freqRaw, int? slope, bool? enabled}) {
+    final state = _loPass[channel];
+    if (state == null) return;
+    if (freqRaw != null) state.freqRaw = freqRaw.clamp(0, 1000);
+    if (slope != null) state.slope = slope.clamp(0, 19);
+    if (enabled != null) state.enabled = enabled;
+    notifyListeners();
+
+    if (!_socketService.isConnected) return;
+    // When disabled, send freq=1000 (max / passthrough) to the device
+    final sendFreq = state.enabled ? state.freqRaw : 1000;
+    final command = _protocolService.buildLoPassCommand(channel, sendFreq, state.slope);
+    _socketService.enqueue(command);
+  }
+
+  /// Apply PEQ bands from config dump
+  void applyPeqBands(Map<String, List<PeqBand>> bands) {
+    for (final entry in bands.entries) {
+      final existing = _peqBands[entry.key];
+      if (existing != null && entry.value.length == existing.length) {
+        for (int i = 0; i < existing.length; i++) {
+          existing[i] = entry.value[i];
+        }
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Apply Hi Pass filter state from config dump
+  void applyHiPass(Map<String, FilterState> filters) {
+    for (final entry in filters.entries) {
+      final existing = _hiPass[entry.key];
+      if (existing != null) {
+        existing.freqRaw = entry.value.freqRaw;
+        existing.slope = entry.value.slope;
+        existing.enabled = entry.value.enabled;
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Apply Lo Pass filter state from config dump
+  void applyLoPass(Map<String, FilterState> filters) {
+    for (final entry in filters.entries) {
+      final existing = _loPass[entry.key];
+      if (existing != null) {
+        existing.freqRaw = entry.value.freqRaw;
+        existing.slope = entry.value.slope;
+        existing.enabled = entry.value.enabled;
+      }
+    }
     notifyListeners();
   }
 
@@ -422,6 +620,12 @@ class DeviceProvider extends ChangeNotifier {
     _geqTimers.clear();
     _pendingGeq.clear();
 
+    for (final t in _peqTimers.values) {
+      t.cancel();
+    }
+    _peqTimers.clear();
+    _pendingPeq.clear();
+
     _presets.clear();
     _currentPreset = 'Unknown';
 
@@ -444,6 +648,18 @@ class DeviceProvider extends ChangeNotifier {
     // Reset GEQ
     _geqBands.updateAll((key, value) => List.filled(31, 0.0));
 
+    // Reset PEQ
+    for (final entry in _peqBands.entries) {
+      final count = entry.key.startsWith('In') ? 8 : 9;
+      _peqBands[entry.key] = List.generate(count, (_) => PeqBand());
+    }
+    for (final ch in _hiPass.keys) {
+      _hiPass[ch] = FilterState();
+    }
+    for (final ch in _loPass.keys) {
+      _loPass[ch] = FilterState();
+    }
+
     notifyListeners();
   }
 
@@ -453,6 +669,9 @@ class DeviceProvider extends ChangeNotifier {
       t.cancel();
     }
     for (final t in _geqTimers.values) {
+      t.cancel();
+    }
+    for (final t in _peqTimers.values) {
       t.cancel();
     }
     _dataSubscription?.cancel();

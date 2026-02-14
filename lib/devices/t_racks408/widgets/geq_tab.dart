@@ -4,7 +4,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../../services/rta_service.dart';
+import '../../../services/rta_settings_provider.dart';
 import '../providers/device_provider.dart';
 
 // 31-band ISO 1/3-octave center frequencies
@@ -37,12 +40,52 @@ class _GeqTabState extends State<GeqTab> {
   DeviceProvider get deviceProvider => widget.deviceProvider;
   final ScrollController _scrollController = ScrollController();
 
-  String _selectedChannel = 'In A';
+  final Set<String> _selectedChannels = {'In A'};
   final bool _drawMode = false;
   int? _activeBandIndex;
 
+  bool _rtaEnabled = false;
+  RtaService? _rtaService;
+  bool _disposed = false;
+
+  void _toggleRta() async {
+    if (_rtaEnabled) {
+      _rtaService?.release();
+      _rtaService = null;
+      setState(() => _rtaEnabled = false);
+    } else {
+      final rtaSettings = context.read<RtaSettingsProvider>();
+      if (!rtaSettings.isMobile) {
+        rtaSettings.enumerateDevices();
+      }
+      final svc = RtaService();
+      svc.onUpdate = () {
+        if (!_disposed) setState(() {});
+      };
+      try {
+        await svc.requestPermission();
+        await svc.startCapture(deviceId: rtaSettings.deviceId);
+        if (!mounted) {
+          svc.release();
+          return;
+        }
+        _rtaService = svc;
+        setState(() => _rtaEnabled = true);
+      } catch (e) {
+        svc.release();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to start RTA: $e')),
+          );
+        }
+      }
+    }
+  }
+
   @override
   void dispose() {
+    _disposed = true;
+    _rtaService?.release();
     _scrollController.dispose();
     super.dispose();
   }
@@ -55,7 +98,7 @@ class _GeqTabState extends State<GeqTab> {
     return ListenableBuilder(
       listenable: deviceProvider,
       builder: (context, _) {
-        final bands = deviceProvider.getGeqBands(_selectedChannel);
+        final bands = deviceProvider.getGeqBands(_selectedChannels.first);
         return Column(
           children: [
             // Graph area
@@ -81,17 +124,21 @@ class _GeqTabState extends State<GeqTab> {
                                     bands: bands,
                                     drawMode: _drawMode,
                                     activeBandIndex: _activeBandIndex,
+                                    rtaMagnitudes: _rtaEnabled ? _rtaService?.magnitudes : null,
+                                    rtaPeaks: _rtaEnabled ? _rtaService?.peaks : null,
                                     width: graphWidth,
                                     height: innerConstraints.maxHeight,
                                     narrow: true,
                                     onBandChanged: (index, dB) {
                                       setState(() => _activeBandIndex = index);
-                                      deviceProvider.setGeqBand(
-                                          _selectedChannel, index, dB);
+                                      for (final ch in _selectedChannels) {
+                                        deviceProvider.setGeqBand(ch, index, dB);
+                                      }
                                     },
                                     onBandReset: (index) {
-                                      deviceProvider.setGeqBand(
-                                          _selectedChannel, index, 0);
+                                      for (final ch in _selectedChannels) {
+                                        deviceProvider.setGeqBand(ch, index, 0);
+                                      }
                                     },
                                     onDragEnd: () {
                                       setState(
@@ -117,15 +164,21 @@ class _GeqTabState extends State<GeqTab> {
                     bands: bands,
                     drawMode: _drawMode,
                     activeBandIndex: _activeBandIndex,
+                    rtaMagnitudes: _rtaEnabled ? _rtaService?.magnitudes : null,
+                    rtaPeaks: _rtaEnabled ? _rtaService?.peaks : null,
                     width: constraints.maxWidth,
                     height: constraints.maxHeight,
                     narrow: false,
                     onBandChanged: (index, dB) {
                       setState(() => _activeBandIndex = index);
-                      deviceProvider.setGeqBand(_selectedChannel, index, dB);
+                      for (final ch in _selectedChannels) {
+                        deviceProvider.setGeqBand(ch, index, dB);
+                      }
                     },
                     onBandReset: (index) {
-                      deviceProvider.setGeqBand(_selectedChannel, index, 0);
+                      for (final ch in _selectedChannels) {
+                        deviceProvider.setGeqBand(ch, index, 0);
+                      }
                     },
                     onDragEnd: () {
                       setState(() => _activeBandIndex = null);
@@ -141,9 +194,35 @@ class _GeqTabState extends State<GeqTab> {
                 children: [
                   _ActionButton(
                     label: 'Flat',
-                    onPressed: () =>
-                        deviceProvider.resetGeqBands(_selectedChannel),
-                  )
+                    onPressed: () {
+                      for (final ch in _selectedChannels) {
+                        deviceProvider.resetGeqBands(ch);
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _toggleRta,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _rtaEnabled
+                            ? const Color(0xFF66D9EF)
+                            : const Color(0xFF3E3D32),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'RTA',
+                        style: TextStyle(
+                          color: _rtaEnabled
+                              ? const Color(0xFF272822)
+                              : const Color(0xFFF8F8F2),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -153,12 +232,20 @@ class _GeqTabState extends State<GeqTab> {
                   .copyWith(bottom: narrow ? 6 + MediaQuery.of(context).viewPadding.bottom : 10),
               child: Row(
                 children: ['In A', 'In B', 'In C', 'In D'].map((ch) {
-                  final active = ch == _selectedChannel;
+                  final active = _selectedChannels.contains(ch);
                   return Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 3),
                       child: GestureDetector(
-                        onTap: () => setState(() => _selectedChannel = ch),
+                        onTap: () => setState(() {
+                          if (_selectedChannels.contains(ch)) {
+                            if (_selectedChannels.length > 1) {
+                              _selectedChannels.remove(ch);
+                            }
+                          } else {
+                            _selectedChannels.add(ch);
+                          }
+                        }),
                         child: Container(
                           height: 36,
                           alignment: Alignment.center,
@@ -316,6 +403,8 @@ class _GeqGraph extends StatelessWidget {
   final List<double> bands;
   final bool drawMode;
   final int? activeBandIndex;
+  final List<double>? rtaMagnitudes;
+  final List<double>? rtaPeaks;
   final double width;
   final double height;
   final bool narrow;
@@ -327,6 +416,8 @@ class _GeqGraph extends StatelessWidget {
     required this.bands,
     required this.drawMode,
     required this.activeBandIndex,
+    this.rtaMagnitudes,
+    this.rtaPeaks,
     required this.width,
     required this.height,
     required this.narrow,
@@ -401,6 +492,8 @@ class _GeqGraph extends StatelessWidget {
           painter: _GeqPainter(
             bands: bands,
             activeBandIndex: activeBandIndex,
+            rtaMagnitudes: rtaMagnitudes,
+            rtaPeaks: rtaPeaks,
             padLeft: _padLeft,
             padRight: _padRight,
             padTop: _padTop,
@@ -418,6 +511,8 @@ class _GeqGraph extends StatelessWidget {
 class _GeqPainter extends CustomPainter {
   final List<double> bands;
   final int? activeBandIndex;
+  final List<double>? rtaMagnitudes;
+  final List<double>? rtaPeaks;
   final double padLeft;
   final double padRight;
   final double padTop;
@@ -427,6 +522,8 @@ class _GeqPainter extends CustomPainter {
   _GeqPainter({
     required this.bands,
     this.activeBandIndex,
+    this.rtaMagnitudes,
+    this.rtaPeaks,
     required this.padLeft,
     required this.padRight,
     required this.padTop,
@@ -524,6 +621,47 @@ class _GeqPainter extends CustomPainter {
       )..layout();
       final x = _freqToX(freq, graphW) - tp.width / 2;
       tp.paint(canvas, Offset(x, padTop + graphH + 4));
+    }
+
+    // ── RTA overlay bars (drawn behind EQ controls) ──
+    if (rtaMagnitudes != null && rtaMagnitudes!.length == rtaBandCount) {
+      final rtaBarPaint = Paint()..color = const Color(0x4F66D9EF); // cyan ~31%
+      final rtaPeakPaint = Paint()
+        ..color = const Color(0x78FFFFFF) // white ~47%
+        ..strokeWidth = 1.0;
+
+      for (int b = 0; b < rtaBandCount; b++) {
+        final loFreq = rtaBandEdges[b];
+        final hiFreq = rtaBandEdges[b + 1];
+
+        // Map RTA band edges to pixel X via GEQ's log axis
+        final xLeft = _freqToX(loFreq.clamp(_minFreq, _maxFreq), graphW);
+        final xRight = _freqToX(hiFreq.clamp(_minFreq, _maxFreq), graphW);
+        if (xRight <= padLeft || xLeft >= padLeft + graphW) continue;
+
+        // Squash full RTA range (-140..+10 dB) into the graph height
+        final norm = (rtaMagnitudes![b] - rtaMinDb) / rtaDbRange;
+        final barY = padTop + graphH * (1.0 - norm.clamp(0.0, 1.0));
+
+        final clampedLeft = xLeft.clamp(padLeft, padLeft + graphW);
+        final clampedRight = xRight.clamp(padLeft, padLeft + graphW);
+
+        canvas.drawRect(
+          Rect.fromLTRB(clampedLeft, barY, clampedRight, padTop + graphH),
+          rtaBarPaint,
+        );
+
+        // Peak hold marker
+        if (rtaPeaks != null && rtaPeaks!.length == rtaBandCount) {
+          final peakNorm = (rtaPeaks![b] - rtaMinDb) / rtaDbRange;
+          final peakY = padTop + graphH * (1.0 - peakNorm.clamp(0.0, 1.0));
+          canvas.drawLine(
+            Offset(clampedLeft, peakY),
+            Offset(clampedRight, peakY),
+            rtaPeakPaint,
+          );
+        }
+      }
     }
 
     // Band bars + handles — positioned by log frequency

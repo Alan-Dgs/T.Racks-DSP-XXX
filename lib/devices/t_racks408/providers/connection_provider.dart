@@ -11,6 +11,33 @@ import '../load_preset.dart';
 import 'device_provider.dart';
 import '../protocol.dart';
 
+/// A single debug log entry. Packet entries store both raw hex and decoded
+/// representations so the Decode checkbox can toggle between them at display time.
+class DebugEntry {
+  final String text;       // Display text for non-packet messages
+  final String? rawHex;    // Raw hex (e.g. "Rx: 10 02 ... → ...")
+  final String? decoded;   // Decoded (e.g. "Rx: SET GAIN In A -3.2 dB")
+  final double timestamp;
+
+  /// Plain status/progress message (not a packet).
+  DebugEntry.status(this.text, this.timestamp)
+      : rawHex = null,
+        decoded = null;
+
+  /// Rx or Tx packet with both representations.
+  DebugEntry.packet({
+    required this.rawHex,
+    required this.decoded,
+    required this.timestamp,
+  }) : text = '';
+
+  /// The string to display, given the current decode toggle.
+  String display(bool decodeOn) {
+    if (rawHex != null) return decodeOn ? decoded! : rawHex!;
+    return text;
+  }
+}
+
 class ConnectionProvider extends ChangeNotifier {
   final SocketService _socketService;
   final ProtocolService _protocolService;
@@ -33,9 +60,16 @@ class ConnectionProvider extends ChangeNotifier {
   bool _isLoading = false;
 
   // Debug messages
-  final List<String> _receivedMessages = [];
-  final List<double> _messageTimestamps = [];
+  final List<DebugEntry> _debugEntries = [];
   Stopwatch? _connectionStopwatch;
+
+  // Debug log filters
+  bool _showRx = false;
+  bool _showTx = false;
+  bool _showDecoded = false;
+  bool get showRx => _showRx;
+  bool get showTx => _showTx;
+  bool get showDecoded => _showDecoded;
 
   // Data subscription
   StreamSubscription<List<int>>? _dataSubscription;
@@ -45,8 +79,7 @@ class ConnectionProvider extends ChangeNotifier {
   bool get isConnected => _socketService.isConnected && !_isLoading;
   bool get isSocketConnected => _socketService.isConnected;
   bool get isLoading => _isLoading;
-  List<String> get receivedMessages => List.unmodifiable(_receivedMessages);
-  List<double> get messageTimestamps => List.unmodifiable(_messageTimestamps);
+  List<DebugEntry> get debugEntries => List.unmodifiable(_debugEntries);
   int get packetsSent => _socketService.packetsSent;
   int get packetsReceived => _socketService.packetsReceived;
   double get initProgress {
@@ -83,20 +116,14 @@ class ConnectionProvider extends ChangeNotifier {
 
   /// Handle incoming socket data
   void _handleSocketData(List<int> data) {
-    // Log received data
-    final hexData = _protocolService.formatAsHex(data);
-    final asciiData = _protocolService.formatAsAscii(data);
-    _addMessage('Rx: $hexData → $asciiData');
-
-    // Decode protocol message for logging
-    final message = _protocolService.decode(data);
-    if (message is PresetMessage) {
-      final label = 'U${(message.index + 1).toString().padLeft(2, '0')}';
-      _addMessage('Rx: PRESET $label: ${message.name}');
-    } else if (message is ChannelConfigMessage) {
-      _addMessage('Rx: CONFIG chunk 0x${message.subIndex.toRadixString(16).padLeft(2, '0')}');
-    } else if (message is DeviceInfoMessage) {
-      _addMessage('Rx: DEVICE: ${message.deviceName}');
+    // Log Rx packet with both representations
+    if (_showRx) {
+      final hexData = _protocolService.formatAsHex(data);
+      final asciiData = _protocolService.formatAsAscii(data);
+      _addPacketEntry(
+        rawHex: 'Rx: $hexData → $asciiData',
+        decoded: 'Rx: ${_describeRxPacket(data)}',
+      );
     }
 
     // Handle preset loading sequence
@@ -134,8 +161,7 @@ class ConnectionProvider extends ChangeNotifier {
     try {
       _isLoading = true;
       _connectionStatus = 'Connecting...';
-      _receivedMessages.clear();
-      _messageTimestamps.clear();
+      _debugEntries.clear();
       _connectionStopwatch = Stopwatch()..start();
       notifyListeners();
 
@@ -154,9 +180,7 @@ class ConnectionProvider extends ChangeNotifier {
       _socketService.send(handshake);
       _initializer.markCommandSent();
 
-      final hexData = _protocolService.formatAsHex(handshake);
-      final asciiData = _protocolService.formatAsAscii(handshake);
-      _addMessage('Tx: $hexData → $asciiData');
+      _logTx(handshake);
       notifyListeners();
     } catch (e) {
       _connectionStatus = 'Failed to connect: $e';
@@ -183,9 +207,7 @@ class ConnectionProvider extends ChangeNotifier {
       sendToSocket: (command) {
         try {
           _socketService.send(command);
-          final hexData = _protocolService.formatAsHex(command);
-          final asciiData = _protocolService.formatAsAscii(command);
-          _addMessage('Tx: $hexData → $asciiData');
+          _logTx(command);
           notifyListeners();
         } catch (e) {
           _addMessage('DEBUG: Send error: $e');
@@ -213,6 +235,21 @@ class ConnectionProvider extends ChangeNotifier {
           if (geq.isNotEmpty) {
             _deviceProvider!.applyGeqBands(geq);
             _addMessage('Applied GEQ: ${geq.length} channels');
+          }
+          final peq = _initializer.peqBands;
+          if (peq.isNotEmpty) {
+            _deviceProvider!.applyPeqBands(peq);
+            _addMessage('Applied PEQ: ${peq.length} channels');
+          }
+          final hpf = _initializer.hiPass;
+          if (hpf.isNotEmpty) {
+            _deviceProvider!.applyHiPass(hpf);
+            _addMessage('Applied HPF: ${hpf.length} channels');
+          }
+          final lpf = _initializer.loPass;
+          if (lpf.isNotEmpty) {
+            _deviceProvider!.applyLoPass(lpf);
+            _addMessage('Applied LPF: ${lpf.length} channels');
           }
           final preset = _initializer.currentPreset;
           if (preset != 'Unknown') {
@@ -311,6 +348,21 @@ class ConnectionProvider extends ChangeNotifier {
           _deviceProvider!.applyGeqBands(geq);
           _addMessage('Applied GEQ: ${geq.length} channels');
         }
+        final peq = _presetConfigParser!.peqBands;
+        if (peq.isNotEmpty) {
+          _deviceProvider!.applyPeqBands(peq);
+          _addMessage('Applied PEQ: ${peq.length} channels');
+        }
+        final hpf = _presetConfigParser!.hiPass;
+        if (hpf.isNotEmpty) {
+          _deviceProvider!.applyHiPass(hpf);
+          _addMessage('Applied HPF: ${hpf.length} channels');
+        }
+        final lpf = _presetConfigParser!.loPass;
+        if (lpf.isNotEmpty) {
+          _deviceProvider!.applyLoPass(lpf);
+          _addMessage('Applied LPF: ${lpf.length} channels');
+        }
         final preset = _presetConfigParser!.currentPreset;
         if (preset != 'Unknown') {
           _deviceProvider!.setCurrentPreset(preset);
@@ -326,9 +378,7 @@ class ConnectionProvider extends ChangeNotifier {
     try {
       _socketService.send(command);
       _presetLoadWaiting = true;
-      final hexData = _protocolService.formatAsHex(command);
-      final asciiData = _protocolService.formatAsAscii(command);
-      _addMessage('Tx: $hexData → $asciiData');
+      _logTx(command);
       notifyListeners();
     } catch (e) {
       _addMessage('DEBUG: Preset load send error: $e');
@@ -350,11 +400,21 @@ class ConnectionProvider extends ChangeNotifier {
     _socketService.startQueue(keepalive);
   }
 
-  /// Add a timestamped debug message
+  double get _elapsed =>
+      (_connectionStopwatch?.elapsed.inMicroseconds ?? 0) / 1e6;
+
+  /// Add a plain status/progress message
   void _addMessage(String message) {
-    _receivedMessages.add(message);
-    final elapsed = _connectionStopwatch?.elapsed.inMicroseconds ?? 0;
-    _messageTimestamps.add(elapsed / 1e6);
+    _debugEntries.add(DebugEntry.status(message, _elapsed));
+  }
+
+  /// Add a packet entry with both raw hex and decoded representations
+  void _addPacketEntry({required String rawHex, required String decoded}) {
+    _debugEntries.add(DebugEntry.packet(
+      rawHex: rawHex,
+      decoded: decoded,
+      timestamp: _elapsed,
+    ));
   }
 
   /// Add debug message (public)
@@ -363,10 +423,188 @@ class ConnectionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Toggle Rx packet log
+  void toggleShowRx() {
+    _showRx = !_showRx;
+    notifyListeners();
+  }
+
+  /// Toggle Tx packet log
+  void toggleShowTx() {
+    _showTx = !_showTx;
+    notifyListeners();
+  }
+
+  /// Toggle decoded packet descriptions
+  void toggleShowDecoded() {
+    _showDecoded = !_showDecoded;
+    notifyListeners();
+  }
+
+  /// Log a transmitted command with both representations
+  void _logTx(List<int> data) {
+    if (_showTx) {
+      final hexData = _protocolService.formatAsHex(data);
+      final asciiData = _protocolService.formatAsAscii(data);
+      _addPacketEntry(
+        rawHex: 'Tx: $hexData → $asciiData',
+        decoded: 'Tx: ${_describePacket(data)}',
+      );
+    }
+  }
+
+  // 31-band ISO 1/3-octave center frequencies for GEQ decode
+  static const _geqFreqs = [
+    '20', '25', '31.5', '40', '50', '63', '80', '100', '125', '160',
+    '200', '250', '315', '400', '500', '630', '800', '1K', '1.25K', '1.6K',
+    '2K', '2.5K', '3.15K', '4K', '5K', '6.3K', '8K', '10K', '12.5K', '16K', '20K',
+  ];
+
+  static const _channelNames = {
+    0x00: 'In A', 0x01: 'In B', 0x02: 'In C', 0x03: 'In D',
+    0x04: 'Out 1', 0x05: 'Out 2', 0x06: 'Out 3', 0x07: 'Out 4',
+    0x08: 'Out 5', 0x09: 'Out 6', 0x0A: 'Out 7', 0x0B: 'Out 8',
+  };
+
+  /// Decode an Rx packet using the parsed ProtocolMessage for richer output
+  String _describeRxPacket(List<int> data) {
+    final message = _protocolService.decode(data);
+    if (message is PresetMessage) {
+      final label = 'U${(message.index + 1).toString().padLeft(2, '0')}';
+      return 'PRESET $label: "${message.name}"';
+    }
+    if (message is ChannelConfigMessage) {
+      return 'CONFIG chunk 0x${message.subIndex.toRadixString(16).padLeft(2, '0')} (${message.chunkData.length} bytes)';
+    }
+    if (message is DeviceInfoMessage) {
+      return 'DEVICE: ${message.deviceName}';
+    }
+    if (message is KeepaliveMessage) {
+      // Show peak levels across all 12 channels
+      const labels = ['In A', 'In B', 'In C', 'In D', 'Out 1', 'Out 2', 'Out 3', 'Out 4', 'Out 5', 'Out 6', 'Out 7', 'Out 8'];
+      final parts = <String>[];
+      for (int i = 0; i < message.meterLevels.length && i < labels.length; i++) {
+        final v = message.meterLevels[i];
+        if (v > 0.0001) parts.add('${labels[i]}:${v.toStringAsFixed(3)}');
+      }
+      return 'METERS ${parts.isEmpty ? "(silence)" : parts.join(" ")}';
+    }
+    if (message is PresetCountMessage) {
+      return 'PRESET COUNT: ${message.count}';
+    }
+    // Fallback to generic decode
+    return _describePacket(data);
+  }
+
+  /// Decode a raw Tx protocol packet into a human-readable description
+  String _describePacket(List<int> data) {
+    if (data.length < 6 || data[0] != 0x10 || data[1] != 0x02) {
+      return 'UNKNOWN (${data.length} bytes)';
+    }
+
+    final cmdByte = data[5];
+
+    switch (cmdByte) {
+      case 0x10: // Handshake
+        return 'HANDSHAKE → DSP408';
+      case 0x40:
+        return 'KEEPALIVE → request meter levels';
+      case 0x12:
+        return 'STATUS QUERY → get active preset';
+      case 0x13:
+        return 'GET DEVICE INFO → request device name';
+      case 0x2c:
+        return 'GET PRESET COUNT → request total presets';
+      case 0x29:
+        if (data.length > 6) {
+          final idx = data[6];
+          return 'GET PRESET U${(idx + 1).toString().padLeft(2, '0')} → request name';
+        }
+        return 'GET PRESET';
+      case 0x27:
+        if (data.length > 6) {
+          final sub = data[6];
+          return 'GET CONFIG CHUNK 0x${sub.toRadixString(16).padLeft(2, '0')} → request channel data';
+        }
+        return 'GET CONFIG';
+      case 0x34: // Gain
+        if (data.length > 8) {
+          final ch = _channelNames[data[6]] ?? 'ch 0x${data[6].toRadixString(16)}';
+          final value = data[7] | (data[8] << 8);
+          final dB = _protocolService.gainValueToDb(value);
+          return 'SET GAIN $ch → ${dB >= 0 ? "+${dB.toStringAsFixed(1)}" : dB.toStringAsFixed(1)} dB';
+        }
+        return 'SET GAIN';
+      case 0x35: // Mute
+        if (data.length > 7) {
+          final ch = _channelNames[data[6]] ?? 'ch 0x${data[6].toRadixString(16)}';
+          final muted = data[7] == 0x01;
+          return 'SET MUTE $ch → ${muted ? "MUTED" : "UNMUTED"}';
+        }
+        return 'SET MUTE';
+      case 0x48: // GEQ band
+        if (data.length > 8) {
+          final ch = _channelNames[data[6]] ?? 'ch 0x${data[6].toRadixString(16)}';
+          final band = data[7];
+          final dB = _protocolService.geqValueToDb(data[8]);
+          final freq = (band >= 0 && band < _geqFreqs.length) ? _geqFreqs[band] : '#$band';
+          return 'SET GEQ $ch ${freq}Hz → ${dB >= 0 ? "+${dB.toStringAsFixed(1)}" : dB.toStringAsFixed(1)} dB';
+        }
+        return 'SET GEQ';
+      case 0x33: // PEQ band
+        if (data.length > 12) {
+          final ch = _channelNames[data[6]] ?? 'ch 0x${data[6].toRadixString(16)}';
+          final band = data[7];
+          final gain = data[8];
+          final dB = _protocolService.geqValueToDb(gain); // same encoding
+          final type = data[11] < ProtocolService.peqTypeNames.length
+              ? ProtocolService.peqTypeNames[data[11]]
+              : '${data[11]}';
+          final bypass = data[12] == 1 ? ' [BYPASS]' : '';
+          return 'SET PEQ $ch band ${band + 1} → ${dB >= 0 ? "+${dB.toStringAsFixed(1)}" : dB.toStringAsFixed(1)} dB $type$bypass';
+        }
+        return 'SET PEQ';
+      case 0x32: // Hi Pass
+        if (data.length > 8) {
+          final ch = _channelNames[data[6]] ?? 'ch 0x${data[6].toRadixString(16)}';
+          final enabled = data[8] == 1 ? 'ON' : 'OFF';
+          return 'SET HPF $ch → $enabled';
+        }
+        return 'SET HPF';
+      case 0x31: // Lo Pass
+        if (data.length > 8) {
+          final ch = _channelNames[data[6]] ?? 'ch 0x${data[6].toRadixString(16)}';
+          final slope = data[8] < ProtocolService.crossoverSlopeNames.length
+              ? ProtocolService.crossoverSlopeNames[data[8]]
+              : '${data[8]}';
+          return 'SET LPF $ch → $slope';
+        }
+        return 'SET LPF';
+      case 0x3a: // Matrix routing
+        if (data.length > 7) {
+          final out = _channelNames[data[6]] ?? 'ch 0x${data[6].toRadixString(16)}';
+          final mask = data[7];
+          final inputs = <String>[];
+          if (mask & 0x01 != 0) inputs.add('In A');
+          if (mask & 0x02 != 0) inputs.add('In B');
+          if (mask & 0x04 != 0) inputs.add('In C');
+          if (mask & 0x08 != 0) inputs.add('In D');
+          return 'SET MATRIX $out ← ${inputs.isEmpty ? "none" : inputs.join(" + ")}';
+        }
+        return 'SET MATRIX';
+      case 0x24: // Config chunk response
+        if (data.length > 6) {
+          return 'CONFIG CHUNK 0x${data[6].toRadixString(16).padLeft(2, '0')} (${data.length} bytes)';
+        }
+        return 'CONFIG CHUNK';
+      default:
+        return 'CMD 0x${cmdByte.toRadixString(16).padLeft(2, '0')} (${data.length} bytes)';
+    }
+  }
+
   /// Clear debug messages
   void clearMessages() {
-    _receivedMessages.clear();
-    _messageTimestamps.clear();
+    _debugEntries.clear();
     notifyListeners();
   }
 
