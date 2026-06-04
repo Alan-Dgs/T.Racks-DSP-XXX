@@ -12,6 +12,7 @@
 - Added DSP408 protocol builders for Gate, Compressor, Limiter, Delay, delay unit, and Test Tone.
 - Added real DSP408 Gate, Compressor, Limiter, and Delay tabs wired to captured TCP commands.
 - Added protocol tests based on captured DSP408 frames.
+- Added config-dump parser coverage for DSP408 dynamics and delay state.
 
 ### Changed
 - Refactored selected widgets/providers to use the DSP408 device profile.
@@ -19,6 +20,7 @@
 - Moved protocol and capture documentation under `docs/`.
 
 ### Fixed
+- Fixed Gate, Compressor, Limiter, and Delay tabs so they load current/preset config instead of starting from defaults.
 - Fixed app test bootstrap to pump the real provider tree.
 - Replaced the default Flutter widget test with a DSP controller smoke test.
 

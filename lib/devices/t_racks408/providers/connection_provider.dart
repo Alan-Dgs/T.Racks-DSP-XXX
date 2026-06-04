@@ -223,43 +223,19 @@ class ConnectionProvider extends ChangeNotifier {
       },
       onComplete: () {
         // Apply parsed state to device provider
-        if (_deviceProvider != null) {
-          final gains = _initializer.channelGains;
-          if (gains.isNotEmpty) {
-            _deviceProvider!.applyChannelConfig(gains);
-            _addMessage('Applied channel config: ${gains.length} channels');
-          }
-          final routing = _initializer.matrixRouting;
-          if (routing.isNotEmpty) {
-            _deviceProvider!.applyMatrixRouting(routing);
-            _addMessage('Applied matrix routing: ${routing.length} outputs');
-          }
-          final geq = _initializer.geqBands;
-          if (geq.isNotEmpty) {
-            _deviceProvider!.applyGeqBands(geq);
-            _addMessage('Applied GEQ: ${geq.length} channels');
-          }
-          final peq = _initializer.peqBands;
-          if (peq.isNotEmpty) {
-            _deviceProvider!.applyPeqBands(peq);
-            _addMessage('Applied PEQ: ${peq.length} channels');
-          }
-          final hpf = _initializer.hiPass;
-          if (hpf.isNotEmpty) {
-            _deviceProvider!.applyHiPass(hpf);
-            _addMessage('Applied HPF: ${hpf.length} channels');
-          }
-          final lpf = _initializer.loPass;
-          if (lpf.isNotEmpty) {
-            _deviceProvider!.applyLoPass(lpf);
-            _addMessage('Applied LPF: ${lpf.length} channels');
-          }
-          final preset = _initializer.currentPreset;
-          if (preset != 'Unknown') {
-            _deviceProvider!.setCurrentPreset(preset);
-            _addMessage('Active preset: $preset');
-          }
-        }
+        _applyParsedConfig(
+          channelGains: _initializer.channelGains,
+          matrixRouting: _initializer.matrixRouting,
+          geqBands: _initializer.geqBands,
+          peqBands: _initializer.peqBands,
+          hiPass: _initializer.hiPass,
+          loPass: _initializer.loPass,
+          gates: _initializer.gates,
+          compressors: _initializer.compressors,
+          limiters: _initializer.limiters,
+          delays: _initializer.delays,
+          currentPreset: _initializer.currentPreset,
+        );
 
         _isLoading = false;
         notifyListeners();
@@ -343,41 +319,19 @@ class ConnectionProvider extends ChangeNotifier {
         _addMessage('Preset saved');
       }
       if (_deviceProvider != null && _presetConfigParser != null) {
-        final gains = _presetConfigParser!.channelGains;
-        if (gains.isNotEmpty) {
-          _deviceProvider!.applyChannelConfig(gains);
-          _addMessage('Applied channel config: ${gains.length} channels');
-        }
-        final routing = _presetConfigParser!.matrixRouting;
-        if (routing.isNotEmpty) {
-          _deviceProvider!.applyMatrixRouting(routing);
-          _addMessage('Applied matrix routing: ${routing.length} outputs');
-        }
-        final geq = _presetConfigParser!.geqBands;
-        if (geq.isNotEmpty) {
-          _deviceProvider!.applyGeqBands(geq);
-          _addMessage('Applied GEQ: ${geq.length} channels');
-        }
-        final peq = _presetConfigParser!.peqBands;
-        if (peq.isNotEmpty) {
-          _deviceProvider!.applyPeqBands(peq);
-          _addMessage('Applied PEQ: ${peq.length} channels');
-        }
-        final hpf = _presetConfigParser!.hiPass;
-        if (hpf.isNotEmpty) {
-          _deviceProvider!.applyHiPass(hpf);
-          _addMessage('Applied HPF: ${hpf.length} channels');
-        }
-        final lpf = _presetConfigParser!.loPass;
-        if (lpf.isNotEmpty) {
-          _deviceProvider!.applyLoPass(lpf);
-          _addMessage('Applied LPF: ${lpf.length} channels');
-        }
-        final preset = _presetConfigParser!.currentPreset;
-        if (preset != 'Unknown') {
-          _deviceProvider!.setCurrentPreset(preset);
-          _addMessage('Active preset: $preset');
-        }
+        _applyParsedConfig(
+          channelGains: _presetConfigParser!.channelGains,
+          matrixRouting: _presetConfigParser!.matrixRouting,
+          geqBands: _presetConfigParser!.geqBands,
+          peqBands: _presetConfigParser!.peqBands,
+          hiPass: _presetConfigParser!.hiPass,
+          loPass: _presetConfigParser!.loPass,
+          gates: _presetConfigParser!.gates,
+          compressors: _presetConfigParser!.compressors,
+          limiters: _presetConfigParser!.limiters,
+          delays: _presetConfigParser!.delays,
+          currentPreset: _presetConfigParser!.currentPreset,
+        );
       }
       _finishPresetLoad();
       return;
@@ -393,6 +347,68 @@ class ConnectionProvider extends ChangeNotifier {
     } catch (e) {
       _addMessage('DEBUG: Preset load send error: $e');
       _finishPresetLoad();
+    }
+  }
+
+  void _applyParsedConfig({
+    required Map<String, double> channelGains,
+    required Map<String, int> matrixRouting,
+    required Map<String, List<double>> geqBands,
+    required Map<String, List<PeqBand>> peqBands,
+    required Map<String, FilterState> hiPass,
+    required Map<String, FilterState> loPass,
+    required Map<String, GateState> gates,
+    required Map<String, CompressorState> compressors,
+    required Map<String, LimiterState> limiters,
+    required Map<String, DelayState> delays,
+    required String currentPreset,
+  }) {
+    final deviceProvider = _deviceProvider;
+    if (deviceProvider == null) return;
+
+    if (channelGains.isNotEmpty) {
+      deviceProvider.applyChannelConfig(channelGains);
+      _addMessage('Applied channel config: ${channelGains.length} channels');
+    }
+    if (matrixRouting.isNotEmpty) {
+      deviceProvider.applyMatrixRouting(matrixRouting);
+      _addMessage('Applied matrix routing: ${matrixRouting.length} outputs');
+    }
+    if (geqBands.isNotEmpty) {
+      deviceProvider.applyGeqBands(geqBands);
+      _addMessage('Applied GEQ: ${geqBands.length} channels');
+    }
+    if (peqBands.isNotEmpty) {
+      deviceProvider.applyPeqBands(peqBands);
+      _addMessage('Applied PEQ: ${peqBands.length} channels');
+    }
+    if (hiPass.isNotEmpty) {
+      deviceProvider.applyHiPass(hiPass);
+      _addMessage('Applied HPF: ${hiPass.length} channels');
+    }
+    if (loPass.isNotEmpty) {
+      deviceProvider.applyLoPass(loPass);
+      _addMessage('Applied LPF: ${loPass.length} channels');
+    }
+    if (gates.isNotEmpty) {
+      deviceProvider.applyGates(gates);
+      _addMessage('Applied Gate: ${gates.length} inputs');
+    }
+    if (compressors.isNotEmpty) {
+      deviceProvider.applyCompressors(compressors);
+      _addMessage('Applied Compressor: ${compressors.length} outputs');
+    }
+    if (limiters.isNotEmpty) {
+      deviceProvider.applyLimiters(limiters);
+      _addMessage('Applied Limiter: ${limiters.length} outputs');
+    }
+    if (delays.isNotEmpty) {
+      deviceProvider.applyDelays(delays);
+      _addMessage('Applied Delay: ${delays.length} channels');
+    }
+    if (currentPreset != 'Unknown') {
+      deviceProvider.setCurrentPreset(currentPreset);
+      _addMessage('Active preset: $currentPreset');
     }
   }
 

@@ -656,6 +656,55 @@ class DeviceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void applyGates(Map<String, GateState> gates) {
+    for (final entry in gates.entries) {
+      final existing = _gates[entry.key];
+      if (existing != null) {
+        existing.thresholdDb = entry.value.thresholdDb;
+        existing.attackMs = entry.value.attackMs;
+        existing.holdMs = entry.value.holdMs;
+        existing.releaseMs = entry.value.releaseMs;
+      }
+    }
+    notifyListeners();
+  }
+
+  void applyCompressors(Map<String, CompressorState> compressors) {
+    for (final entry in compressors.entries) {
+      final existing = _compressors[entry.key];
+      if (existing != null) {
+        existing.thresholdDb = entry.value.thresholdDb;
+        existing.ratioRaw = entry.value.ratioRaw;
+        existing.kneeDb = entry.value.kneeDb;
+        existing.attackMs = entry.value.attackMs;
+        existing.releaseMs = entry.value.releaseMs;
+      }
+    }
+    notifyListeners();
+  }
+
+  void applyLimiters(Map<String, LimiterState> limiters) {
+    for (final entry in limiters.entries) {
+      final existing = _limiters[entry.key];
+      if (existing != null) {
+        existing.thresholdDb = entry.value.thresholdDb;
+        existing.attackMs = entry.value.attackMs;
+        existing.releaseMs = entry.value.releaseMs;
+      }
+    }
+    notifyListeners();
+  }
+
+  void applyDelays(Map<String, DelayState> delays) {
+    for (final entry in delays.entries) {
+      final existing = _delays[entry.key];
+      if (existing != null) {
+        existing.ms = entry.value.ms.clamp(0.0, 680.0);
+      }
+    }
+    notifyListeners();
+  }
+
   /// Reset all GEQ bands to flat (0 dB) and send commands
   void resetGeqBands(String channel) {
     // Cancel any pending GEQ timers for this channel
