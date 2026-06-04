@@ -198,6 +198,7 @@ class _MyHomePageState extends State<MyHomePage> {
   // UI state (local only)
   bool _showConnect = false;
   bool _showDebug = false;
+  bool _showTestTone = false;
   bool _showTimestamps = false;
   String? _selectedPreset;
   String? _lastSyncedPreset;
@@ -415,6 +416,17 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     tooltip: 'Debug',
                     onPressed: () => setState(() => _showDebug = !_showDebug),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      _showTestTone
+                          ? Icons.graphic_eq
+                          : Icons.graphic_eq_outlined,
+                      size: 20,
+                    ),
+                    tooltip: 'Test Tone',
+                    onPressed: () =>
+                        setState(() => _showTestTone = !_showTestTone),
                   ),
                   IconButton(
                     icon: const Icon(Icons.settings, size: 20),
@@ -847,6 +859,9 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
             ),
 
+            if (_showTestTone)
+              _buildTestTonePanel(deviceProvider, connectionProvider),
+
             // Debug panel
             if (_showDebug)
               SizedBox(
@@ -973,6 +988,20 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                     ),
                     ElevatedButton.icon(
+                      onPressed: () =>
+                          setState(() => _showTestTone = !_showTestTone),
+                      icon: Icon(
+                        _showTestTone
+                            ? Icons.keyboard_arrow_up
+                            : Icons.keyboard_arrow_down,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'Test Tone',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    ElevatedButton.icon(
                       onPressed: () => setState(() => _showDebug = !_showDebug),
                       icon: Icon(
                         _showDebug
@@ -1021,6 +1050,160 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         Text(label, style: const TextStyle(fontSize: 11)),
       ],
+    );
+  }
+
+  Widget _buildTestTonePanel(
+    DeviceProvider deviceProvider,
+    ConnectionProvider connectionProvider,
+  ) {
+    const sources = [
+      ('Analog Input', 0),
+      ('Pink Noise', 1),
+      ('White Noise', 2),
+      ('Sine Wave', 3),
+    ];
+    const frequencies = [
+      '20Hz',
+      '25Hz',
+      '31.5Hz',
+      '40Hz',
+      '50Hz',
+      '63Hz',
+      '80Hz',
+      '100Hz',
+      '125Hz',
+      '160Hz',
+      '200Hz',
+      '250Hz',
+      '315Hz',
+      '400Hz',
+      '500Hz',
+      '630Hz',
+      '800Hz',
+      '1KHz',
+      '1.25KHz',
+      '1.6KHz',
+      '2KHz',
+      '2.5KHz',
+      '3.15KHz',
+      '4KHz',
+      '5KHz',
+      '6.3KHz',
+      '8KHz',
+      '10KHz',
+      '12.5KHz',
+      '16KHz',
+      '20KHz',
+    ];
+
+    final state = deviceProvider.testTone;
+    final isSine = state.source == 3;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow = constraints.maxWidth < 620;
+            final sourceDropdown = DropdownButton<int>(
+              value: state.source,
+              isExpanded: true,
+              items: sources
+                  .map(
+                    (entry) => DropdownMenuItem<int>(
+                      value: entry.$2,
+                      child: Text(entry.$1),
+                    ),
+                  )
+                  .toList(),
+              onChanged: connectionProvider.isConnected
+                  ? (value) {
+                      if (value != null) {
+                        deviceProvider.setTestTone(source: value);
+                      }
+                    }
+                  : null,
+            );
+            final frequencyDropdown = DropdownButton<int>(
+              value: state.frequencyIndex,
+              isExpanded: true,
+              items: List.generate(
+                frequencies.length,
+                (index) => DropdownMenuItem<int>(
+                  value: index,
+                  child: Text(frequencies[index]),
+                ),
+              ),
+              onChanged: connectionProvider.isConnected && isSine
+                  ? (value) {
+                      if (value != null) {
+                        deviceProvider.setTestTone(frequencyIndex: value);
+                      }
+                    }
+                  : null,
+            );
+
+            final controls = [
+              Expanded(
+                flex: 2,
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Source',
+                    isDense: true,
+                  ),
+                  child: sourceDropdown,
+                ),
+              ),
+              const SizedBox(width: 10, height: 10),
+              Expanded(
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Sine Frequency',
+                    isDense: true,
+                  ),
+                  child: frequencyDropdown,
+                ),
+              ),
+            ];
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.graphic_eq, size: 18),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Test Tone',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      connectionProvider.isConnected
+                          ? 'Command 0x39'
+                          : 'Connect first',
+                      style: const TextStyle(
+                        color: Color(0xFF75715E),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (narrow)
+                  Column(children: controls)
+                else
+                  Row(children: controls),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 

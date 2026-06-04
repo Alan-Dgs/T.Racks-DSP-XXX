@@ -13,6 +13,7 @@
 - Added real DSP408 Gate, Compressor, Limiter, and Delay tabs wired to captured TCP commands.
 - Added protocol tests based on captured DSP408 frames.
 - Added config-dump parser coverage for DSP408 dynamics and delay state.
+- Added a bottom Test Tone panel wired to the captured DSP408 test tone command.
 
 ### Changed
 - Refactored selected widgets/providers to use the DSP408 device profile.

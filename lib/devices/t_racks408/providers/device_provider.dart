@@ -115,6 +115,16 @@ class DelayState {
   DelayState copy() => DelayState(ms: ms);
 }
 
+class TestToneState {
+  int source;
+  int frequencyIndex;
+
+  TestToneState({this.source = 0, this.frequencyIndex = 0});
+
+  TestToneState copy() =>
+      TestToneState(source: source, frequencyIndex: frequencyIndex);
+}
+
 class DeviceProvider extends ChangeNotifier {
   static const profile = DeviceProfiles.dsp408;
 
@@ -209,6 +219,8 @@ class DeviceProvider extends ChangeNotifier {
   };
 
   int _delayUnit = 0;
+
+  TestToneState _testTone = TestToneState();
 
   // Channel aliases
   final Map<String, String> _channelAliases = {};
@@ -428,6 +440,8 @@ class DeviceProvider extends ChangeNotifier {
 
   int get delayUnit => _delayUnit;
 
+  TestToneState get testTone => _testTone.copy();
+
   /// Set a PEQ band parameter and send to device (throttled 50ms per channel+band)
   void setPeqBand(
     String channel,
@@ -612,6 +626,21 @@ class DeviceProvider extends ChangeNotifier {
 
     if (!_socketService.isConnected) return;
     final command = _protocolService.buildDelayUnitCommand(_delayUnit);
+    _socketService.enqueue(command);
+  }
+
+  void setTestTone({int? source, int? frequencyIndex}) {
+    _testTone = TestToneState(
+      source: (source ?? _testTone.source).clamp(0, 3),
+      frequencyIndex: (frequencyIndex ?? _testTone.frequencyIndex).clamp(0, 30),
+    );
+    notifyListeners();
+
+    if (!_socketService.isConnected) return;
+    final command = _protocolService.buildTestToneCommand(
+      _testTone.source,
+      frequencyIndex: _testTone.frequencyIndex,
+    );
     _socketService.enqueue(command);
   }
 
@@ -946,6 +975,7 @@ class DeviceProvider extends ChangeNotifier {
       _delays[ch] = DelayState();
     }
     _delayUnit = 0;
+    _testTone = TestToneState();
 
     notifyListeners();
   }
