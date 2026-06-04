@@ -478,6 +478,225 @@ class ProtocolService {
     return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
   }
 
+  int thresholdDbToRaw(
+    double dB, {
+    required double minDb,
+    required double maxDb,
+  }) {
+    final clamped = dB.clamp(minDb, maxDb);
+    return ((clamped + 90.0) * 2.0).round();
+  }
+
+  int msMinusOneToRaw(int ms, {required int minMs, required int maxMs}) {
+    return ms.clamp(minMs, maxMs) - 1;
+  }
+
+  /// Build gate command (cmd 0x3e)
+  ///
+  /// Gate is available on input channels.
+  List<int> buildGateCommand(
+    String channel, {
+    required double thresholdDb,
+    required int attackMs,
+    required int holdMs,
+    required int releaseMs,
+  }) {
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
+    if (ch == null || !DeviceProfiles.dsp408.inputChannels.contains(channel)) {
+      throw ArgumentError('Invalid gate input channel: $channel');
+    }
+
+    final attack = msMinusOneToRaw(attackMs, minMs: 1, maxMs: 999);
+    final release = msMinusOneToRaw(releaseMs, minMs: 10, maxMs: 3000);
+    final hold = msMinusOneToRaw(holdMs, minMs: 10, maxMs: 999);
+    final threshold = thresholdDbToRaw(thresholdDb, minDb: -90.0, maxDb: 0.0);
+
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x0A,
+      0x3E,
+      ch,
+      attack & 0xFF,
+      (attack >> 8) & 0xFF,
+      release & 0xFF,
+      (release >> 8) & 0xFF,
+      hold & 0xFF,
+      (hold >> 8) & 0xFF,
+      threshold & 0xFF,
+      (threshold >> 8) & 0xFF,
+    ];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Compressor ratio values as encoded by the official editor.
+  static const compressorRatioNames = [
+    '1:1.0',
+    '1:1.7',
+    '1:2.0',
+    '1:2.5',
+    '1:3.0',
+    '1:3.5',
+    '1:4.0',
+    '1:5.0',
+    '1:6.0',
+    '1:8.0',
+    '1:10',
+    '1:20',
+    'Limit',
+  ];
+
+  static const Map<String, int> compressorRatioRawByName = {
+    '1:1.0': 0,
+    '1:1.7': 1,
+    '1:2.0': 2,
+    '1:2.5': 3,
+    '1:3.0': 4,
+    '1:3.5': 5,
+    '1:4.0': 9,
+    '1:5.0': 10,
+    '1:6.0': 11,
+    '1:8.0': 12,
+    '1:10': 13,
+    '1:20': 14,
+    'Limit': 15,
+  };
+
+  /// Build compressor command (cmd 0x30)
+  ///
+  /// Compressor is available on output channels.
+  List<int> buildCompressorCommand(
+    String channel, {
+    required double thresholdDb,
+    required int ratioRaw,
+    required int kneeDb,
+    required int attackMs,
+    required int releaseMs,
+  }) {
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
+    if (ch == null || !DeviceProfiles.dsp408.outputChannels.contains(channel)) {
+      throw ArgumentError('Invalid compressor output channel: $channel');
+    }
+
+    final ratio = ratioRaw.clamp(0, 15);
+    final attack = msMinusOneToRaw(attackMs, minMs: 1, maxMs: 999);
+    final release = msMinusOneToRaw(releaseMs, minMs: 10, maxMs: 3000);
+    final knee = kneeDb.clamp(0, 12);
+    final threshold = thresholdDbToRaw(thresholdDb, minDb: -90.0, maxDb: 20.0);
+
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x0C,
+      0x30,
+      ch,
+      ratio & 0xFF,
+      (ratio >> 8) & 0xFF,
+      attack & 0xFF,
+      (attack >> 8) & 0xFF,
+      release & 0xFF,
+      (release >> 8) & 0xFF,
+      knee & 0xFF,
+      (knee >> 8) & 0xFF,
+      threshold & 0xFF,
+      (threshold >> 8) & 0xFF,
+    ];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Build limiter command (cmd 0x3f)
+  ///
+  /// Limiter is available on output channels. The captured editor keeps an
+  /// unknown two-byte field at zero for the tested values.
+  List<int> buildLimiterCommand(
+    String channel, {
+    required double thresholdDb,
+    required int attackMs,
+    required int releaseMs,
+  }) {
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
+    if (ch == null || !DeviceProfiles.dsp408.outputChannels.contains(channel)) {
+      throw ArgumentError('Invalid limiter output channel: $channel');
+    }
+
+    final attack = msMinusOneToRaw(attackMs, minMs: 1, maxMs: 999);
+    final release = msMinusOneToRaw(releaseMs, minMs: 10, maxMs: 3000);
+    final threshold = thresholdDbToRaw(thresholdDb, minDb: -90.0, maxDb: 20.0);
+
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x0A,
+      0x3F,
+      ch,
+      attack & 0xFF,
+      (attack >> 8) & 0xFF,
+      release & 0xFF,
+      (release >> 8) & 0xFF,
+      0x00,
+      0x00,
+      threshold & 0xFF,
+      (threshold >> 8) & 0xFF,
+    ];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  int delayMsToRaw(double ms) => (ms.clamp(0.0, 680.0) * 96.0).round();
+  double delayRawToMs(int raw) => raw / 96.0;
+
+  /// Build delay command (cmd 0x38)
+  List<int> buildDelayCommand(String channel, double ms) {
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
+    if (ch == null) throw ArgumentError('Invalid delay channel: $channel');
+    final raw = delayMsToRaw(ms);
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x04,
+      0x38,
+      ch,
+      raw & 0xFF,
+      (raw >> 8) & 0xFF,
+    ];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Build delay display-unit command (cmd 0x15): 0=ms, 1=m, 2=ft.
+  List<int> buildDelayUnitCommand(int unit) {
+    final dataBytes = [0x00, 0x01, 0x02, 0x15, unit.clamp(0, 2)];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Test tone sources used by the official editor.
+  static const testToneSources = {
+    'Analog Input': 0x00,
+    'Pink Noise': 0x01,
+    'White Noise': 0x02,
+    'Sine Wave': 0x03,
+  };
+
+  /// Build test tone command (cmd 0x39).
+  ///
+  /// For sine wave, frequencyIndex follows the 31 GEQ center frequencies
+  /// (`0x00`=20Hz, `0x11`=1kHz, `0x1e`=20kHz). Other sources use index 0.
+  List<int> buildTestToneCommand(int source, {int frequencyIndex = 0}) {
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x03,
+      0x39,
+      source.clamp(0, 3),
+      frequencyIndex.clamp(0, 30),
+    ];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
   /// Build Lo Pass filter command (cmd 0x31)
   ///
   /// Protocol: `10 02 00 01 05 31 [ch] [freq_lo] [freq_hi] [slope] 10 03 [chk]`
