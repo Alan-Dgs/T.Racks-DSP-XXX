@@ -1,0 +1,91 @@
+{
+  "device_model": "DSP204",
+  "language": "fr",
+  "scenarios": [
+    {
+      "order": 1,
+      "key": "connection_dump",
+      "title": "Connexion et dump initial",
+      "file_stem": "001_connection_dump",
+      "steps": [
+        "Demarre la capture avant de connecter l'editeur officiel au DSP204.",
+        "Passe l'editeur officiel Online.",
+        "Attends que les presets et l'etat soient charges, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 2,
+      "key": "phase_gain_mute",
+      "title": "Gain / mute / phase",
+      "file_stem": "002_gain_mute_phase",
+      "steps": [
+        "Ouvre Gain.",
+        "Sur InA, mets Gain a -6.0 dB, puis clique Action faite.",
+        "Sur InA, active Mute, puis clique Action faite.",
+        "Sur InA, passe Normal a Inverse, puis clique Action faite.",
+        "Sur Out1, passe Normal a Inverse, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 3,
+      "key": "matrix",
+      "title": "Matrix routing + attenuation",
+      "file_stem": "003_matrix_out1_ina",
+      "steps": [
+        "Ouvre Matrix.",
+        "Route InA vers Out1 uniquement, puis clique Action faite.",
+        "Sur Out1/InA, regle le gain a -6.0 dB, puis clique Action faite.",
+        "Sur Out1/InA, regle le gain a -60.0 dB, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 4,
+      "key": "gate_comp_limit",
+      "title": "Gate / Comp / Limit",
+      "file_stem": "004_gate_comp_limit",
+      "steps": [
+        "Ouvre Gate, sur InA mets Threshold a -40.0 dB, puis clique Action faite.",
+        "Ouvre Comp, sur Out1 mets Threshold a -20.0 dB, puis clique Action faite.",
+        "Sur Out1, mets Ratio a 1:4.0, puis clique Action faite.",
+        "Ouvre Limit, sur Out1 mets Threshold a -10.0 dB, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 5,
+      "key": "delay",
+      "title": "Delay",
+      "file_stem": "005_delay",
+      "steps": [
+        "Ouvre Delay.",
+        "En ms, mets InA a 1.000 ms, puis clique Action faite.",
+        "En ms, mets Out1 a 10.000 ms, puis clique Action faite.",
+        "Passe l'unite en m puis ft, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 6,
+      "key": "peq_geq_filters",
+      "title": "PEQ / GEQ / filtres",
+      "file_stem": "006_peq_geq_filters",
+      "steps": [
+        "Ouvre InA.",
+        "PEQ Band 1: mets Gain a +3.0 dB, puis clique Action faite.",
+        "HighPass: mets 315.0 Hz et slope BW -24, puis clique Action faite.",
+        "Ouvre GEQ, mets 1 kHz a +3.0 dB, puis clique Action faite.",
+        "Clique EQ Bypass, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 7,
+      "key": "channel_name_test_tone",
+      "title": "Channel Name + Test Tone",
+      "file_stem": "007_channel_name_test_tone",
+      "steps": [
+        "Ouvre Channel Name, renomme InA en 12345678, clique Set, puis Action faite.",
+        "Renomme Out4 en 12345678, clique Set, puis Action faite.",
+        "Ouvre Test Tone, selectionne Pink Noise, puis clique Action faite.",
+        "Selectionne Sine Wave 1 kHz, puis clique Action faite."
+      ]
+    }
+  ]
+}

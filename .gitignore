@@ -39,6 +39,29 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Local DSP reverse-engineering artifacts
+/captures/
+/SCREEN_DSP408Soft/
+/wireshark_scripts/
+*.pcap
+*.pcapng
+*.cap
+*.har
+*.etl
+*.log
+.server*.log
+render-local*.png
+CUserstaigaProjects*
+
+# Local/generated protocol scratch files
+analyze_pcap.py
+analyze2.py
+analyze3.py
+analyze4.py
+analyze5.py
+ap_final.py
+write_script.ps1
+
 # Symbolication related
 app.*.symbols
 

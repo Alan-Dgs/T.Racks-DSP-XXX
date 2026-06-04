@@ -28,20 +28,42 @@ final double _logMin = math.log(_minFreq);
 final double _logMax = math.log(_maxFreq);
 final double _logRange = _logMax - _logMin;
 
-double _freqToNorm(double freq) =>
-    (math.log(freq) - _logMin) / _logRange;
+double _freqToNorm(double freq) => (math.log(freq) - _logMin) / _logRange;
 
 String _formatFreq(double freq) {
   if (freq >= 1000) {
     final k = freq / 1000;
-    return k == k.truncateToDouble() ? '${k.toInt()}K' : '${k.toStringAsFixed(1)}K';
+    return k == k.truncateToDouble()
+        ? '${k.toInt()}K'
+        : '${k.toStringAsFixed(1)}K';
   }
-  return freq == freq.truncateToDouble() ? '${freq.toInt()}' : freq.toStringAsFixed(1);
+  return freq == freq.truncateToDouble()
+      ? '${freq.toInt()}'
+      : freq.toStringAsFixed(1);
 }
 
 // Default PEQ frequencies (Hz) per band for inputs (8 bands) and outputs (9 bands)
-const _inputDefaultFreqHz = [50.8, 101.5, 203.1, 500.0, 1000.0, 2000.0, 5040.0, 10080.0];
-const _outputDefaultFreqHz = [40.3, 84.4, 176.8, 370.3, 757.9, 1590.0, 3320.0, 6810.0, 14250.0];
+const _inputDefaultFreqHz = [
+  50.8,
+  101.5,
+  203.1,
+  500.0,
+  1000.0,
+  2000.0,
+  5040.0,
+  10080.0,
+];
+const _outputDefaultFreqHz = [
+  40.3,
+  84.4,
+  176.8,
+  370.3,
+  757.9,
+  1590.0,
+  3320.0,
+  6810.0,
+  14250.0,
+];
 
 class PeqTab extends StatefulWidget {
   final DeviceProvider deviceProvider;
@@ -68,7 +90,11 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
     super.initState();
     // Clamp in case of hot-reload from old 3-tab layout
     _ioTab = _ioTab.clamp(0, 1);
-    _ioTabController = TabController(length: 2, initialIndex: _ioTab, vsync: this);
+    _ioTabController = TabController(
+      length: 2,
+      initialIndex: _ioTab,
+      vsync: this,
+    );
     _ioTabController.addListener(() {
       if (!_ioTabController.indexIsChanging) {
         setState(() {
@@ -92,8 +118,8 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
   }
 
   List<String> get _channels {
-    if (_ioTab == 0) return ['In A', 'In B', 'In C', 'In D'];
-    return ['Out 1', 'Out 2', 'Out 3', 'Out 4', 'Out 5', 'Out 6', 'Out 7', 'Out 8'];
+    if (_ioTab == 0) return deviceProvider.inputChannels;
+    return deviceProvider.outputChannels;
   }
 
   @override
@@ -134,7 +160,11 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
                       },
                       onBandGainChanged: (index, dB) {
                         setState(() => _selectedBand = index);
-                        deviceProvider.setPeqBand(_selectedChannel, index, gainDb: dB);
+                        deviceProvider.setPeqBand(
+                          _selectedChannel,
+                          index,
+                          gainDb: dB,
+                        );
                       },
                     ),
                   );
@@ -256,10 +286,17 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
                   children: [
                     GestureDetector(
                       onTap: () {
-                        deviceProvider.setPeqBand(_selectedChannel, _selectedBand, bypass: !band.bypass);
+                        deviceProvider.setPeqBand(
+                          _selectedChannel,
+                          _selectedBand,
+                          bypass: !band.bypass,
+                        );
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: band.bypass
                               ? const Color(0xFFF92672)
@@ -294,16 +331,26 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
                       value: band.type,
                       isExpanded: true,
                       dropdownColor: const Color(0xFF3E3D32),
-                      style: const TextStyle(fontSize: 10, color: Color(0xFFF8F8F2)),
-                      items: List.generate(ProtocolService.peqTypeNames.length, (i) {
-                        return DropdownMenuItem(
-                          value: i,
-                          child: Text(ProtocolService.peqTypeNames[i]),
-                        );
-                      }),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFFF8F8F2),
+                      ),
+                      items: List.generate(
+                        ProtocolService.peqTypeNames.length,
+                        (i) {
+                          return DropdownMenuItem(
+                            value: i,
+                            child: Text(ProtocolService.peqTypeNames[i]),
+                          );
+                        },
+                      ),
                       onChanged: (v) {
                         if (v != null) {
-                          deviceProvider.setPeqBand(_selectedChannel, _selectedBand, type: v);
+                          deviceProvider.setPeqBand(
+                            _selectedChannel,
+                            _selectedBand,
+                            type: v,
+                          );
                         }
                       },
                     ),
@@ -325,14 +372,23 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
                   displayText: _formatFreq(freqHz),
                   color: const Color(0xFF66D9EF),
                   onChanged: (v) {
-                    deviceProvider.setPeqBand(_selectedChannel, _selectedBand, freqRaw: v.round());
+                    deviceProvider.setPeqBand(
+                      _selectedChannel,
+                      _selectedBand,
+                      freqRaw: v.round(),
+                    );
                   },
                   onDoubleTap: () {
                     final isInput = _selectedChannel.startsWith('In');
-                    final defaults = isInput ? _inputDefaultFreqHz : _outputDefaultFreqHz;
+                    final defaults = isInput
+                        ? _inputDefaultFreqHz
+                        : _outputDefaultFreqHz;
                     final defaultHz = defaults[_selectedBand % defaults.length];
-                    deviceProvider.setPeqBand(_selectedChannel, _selectedBand,
-                        freqRaw: _proto.peqHzToFreq(defaultHz));
+                    deviceProvider.setPeqBand(
+                      _selectedChannel,
+                      _selectedBand,
+                      freqRaw: _proto.peqHzToFreq(defaultHz),
+                    );
                   },
                 ),
                 _labeledSlider(
@@ -343,11 +399,18 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
                   displayText: q.toStringAsFixed(2),
                   color: const Color(0xFFFD971F),
                   onChanged: (v) {
-                    deviceProvider.setPeqBand(_selectedChannel, _selectedBand, qRaw: v.round());
+                    deviceProvider.setPeqBand(
+                      _selectedChannel,
+                      _selectedBand,
+                      qRaw: v.round(),
+                    );
                   },
                   onDoubleTap: () {
-                    deviceProvider.setPeqBand(_selectedChannel, _selectedBand,
-                        qRaw: _proto.peqQToRaw(3.0));
+                    deviceProvider.setPeqBand(
+                      _selectedChannel,
+                      _selectedBand,
+                      qRaw: _proto.peqQToRaw(3.0),
+                    );
                   },
                 ),
                 _labeledSlider(
@@ -355,13 +418,22 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
                   value: band.gainDb,
                   min: -12.0,
                   max: 12.0,
-                  displayText: '${band.gainDb >= 0 ? "+" : ""}${band.gainDb.toStringAsFixed(1)} dB',
+                  displayText:
+                      '${band.gainDb >= 0 ? "+" : ""}${band.gainDb.toStringAsFixed(1)} dB',
                   color: const Color(0xFFA6E22E),
                   onChanged: (v) {
-                    deviceProvider.setPeqBand(_selectedChannel, _selectedBand, gainDb: v);
+                    deviceProvider.setPeqBand(
+                      _selectedChannel,
+                      _selectedBand,
+                      gainDb: v,
+                    );
                   },
                   onDoubleTap: () {
-                    deviceProvider.setPeqBand(_selectedChannel, _selectedBand, gainDb: 0.0);
+                    deviceProvider.setPeqBand(
+                      _selectedChannel,
+                      _selectedBand,
+                      gainDb: 0.0,
+                    );
                   },
                 ),
               ],
@@ -390,13 +462,18 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
           children: [
             SizedBox(
               width: 36,
-              child: Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF75715E))),
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 11, color: Color(0xFF75715E)),
+              ),
             ),
             Expanded(
               child: SliderTheme(
                 data: SliderThemeData(
                   trackHeight: 3,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 7,
+                  ),
                   activeTrackColor: color,
                   inactiveTrackColor: const Color(0xFF3E3D32),
                   thumbColor: color,
@@ -439,17 +516,27 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
           Row(
             children: [
               GestureDetector(
-                onTap: () => deviceProvider.setHiPass(_selectedChannel, enabled: !hiPass.enabled),
+                onTap: () => deviceProvider.setHiPass(
+                  _selectedChannel,
+                  enabled: !hiPass.enabled,
+                ),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
-                    color: hiPass.enabled ? const Color(0xFFA6E22E) : const Color(0xFF3E3D32),
+                    color: hiPass.enabled
+                        ? const Color(0xFFA6E22E)
+                        : const Color(0xFF3E3D32),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     'HPF',
                     style: TextStyle(
-                      color: hiPass.enabled ? const Color(0xFF272822) : const Color(0xFF75715E),
+                      color: hiPass.enabled
+                          ? const Color(0xFF272822)
+                          : const Color(0xFF75715E),
                       fontWeight: FontWeight.w600,
                       fontSize: 11,
                     ),
@@ -470,13 +557,19 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
                     value: hiPass.slope,
                     isExpanded: true,
                     dropdownColor: const Color(0xFF3E3D32),
-                    style: const TextStyle(fontSize: 10, color: Color(0xFFF8F8F2)),
-                    items: List.generate(ProtocolService.crossoverSlopeNames.length, (i) {
-                      return DropdownMenuItem(
-                        value: i,
-                        child: Text(ProtocolService.crossoverSlopeNames[i]),
-                      );
-                    }),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFFF8F8F2),
+                    ),
+                    items: List.generate(
+                      ProtocolService.crossoverSlopeNames.length,
+                      (i) {
+                        return DropdownMenuItem(
+                          value: i,
+                          child: Text(ProtocolService.crossoverSlopeNames[i]),
+                        );
+                      },
+                    ),
                     onChanged: (v) {
                       if (v != null) {
                         deviceProvider.setHiPass(_selectedChannel, slope: v);
@@ -495,7 +588,10 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
                   displayText: _formatFreq(hiFreqHz),
                   color: const Color(0xFFF92672),
                   onChanged: (v) {
-                    deviceProvider.setHiPass(_selectedChannel, freqRaw: v.round());
+                    deviceProvider.setHiPass(
+                      _selectedChannel,
+                      freqRaw: v.round(),
+                    );
                   },
                   onDoubleTap: () {
                     deviceProvider.setHiPass(_selectedChannel, freqRaw: 0);
@@ -508,17 +604,27 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
           Row(
             children: [
               GestureDetector(
-                onTap: () => deviceProvider.setLoPass(_selectedChannel, enabled: !loPass.enabled),
+                onTap: () => deviceProvider.setLoPass(
+                  _selectedChannel,
+                  enabled: !loPass.enabled,
+                ),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
-                    color: loPass.enabled ? const Color(0xFFA6E22E) : const Color(0xFF3E3D32),
+                    color: loPass.enabled
+                        ? const Color(0xFFA6E22E)
+                        : const Color(0xFF3E3D32),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     'LPF',
                     style: TextStyle(
-                      color: loPass.enabled ? const Color(0xFF272822) : const Color(0xFF75715E),
+                      color: loPass.enabled
+                          ? const Color(0xFF272822)
+                          : const Color(0xFF75715E),
                       fontWeight: FontWeight.w600,
                       fontSize: 11,
                     ),
@@ -539,13 +645,19 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
                     value: loPass.slope,
                     isExpanded: true,
                     dropdownColor: const Color(0xFF3E3D32),
-                    style: const TextStyle(fontSize: 10, color: Color(0xFFF8F8F2)),
-                    items: List.generate(ProtocolService.crossoverSlopeNames.length, (i) {
-                      return DropdownMenuItem(
-                        value: i,
-                        child: Text(ProtocolService.crossoverSlopeNames[i]),
-                      );
-                    }),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFFF8F8F2),
+                    ),
+                    items: List.generate(
+                      ProtocolService.crossoverSlopeNames.length,
+                      (i) {
+                        return DropdownMenuItem(
+                          value: i,
+                          child: Text(ProtocolService.crossoverSlopeNames[i]),
+                        );
+                      },
+                    ),
                     onChanged: (v) {
                       if (v != null) {
                         deviceProvider.setLoPass(_selectedChannel, slope: v);
@@ -564,7 +676,10 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
                   displayText: _formatFreq(loFreqHz),
                   color: const Color(0xFF66D9EF),
                   onChanged: (v) {
-                    deviceProvider.setLoPass(_selectedChannel, freqRaw: v.round());
+                    deviceProvider.setLoPass(
+                      _selectedChannel,
+                      freqRaw: v.round(),
+                    );
                   },
                   onDoubleTap: () {
                     deviceProvider.setLoPass(_selectedChannel, freqRaw: 1000);
@@ -624,8 +739,9 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
     final channels = _channels;
 
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 12)
-          .copyWith(bottom: narrow ? 6 + MediaQuery.of(context).viewPadding.bottom : 10),
+      padding: EdgeInsets.symmetric(horizontal: 12).copyWith(
+        bottom: narrow ? 6 + MediaQuery.of(context).viewPadding.bottom : 10,
+      ),
       child: Column(
         children: [
           // I/O tabs (2 tabs: Inputs, Outputs)
@@ -637,7 +753,10 @@ class _PeqTabState extends State<PeqTab> with SingleTickerProviderStateMixin {
                 Tab(text: 'Inputs'),
                 Tab(text: 'Outputs'),
               ],
-              labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              labelStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
               unselectedLabelStyle: const TextStyle(fontSize: 12),
               indicatorSize: TabBarIndicatorSize.tab,
               dividerHeight: 0,
@@ -862,7 +981,11 @@ class _PeqPainter extends CustomPainter {
     // Draw subdivision lines (no labels)
     for (final dB in dBStepsSub) {
       final y = _dBToY(dB, graphH);
-      canvas.drawLine(Offset(padLeft, y), Offset(padLeft + graphW, y), subGridPaint);
+      canvas.drawLine(
+        Offset(padLeft, y),
+        Offset(padLeft + graphW, y),
+        subGridPaint,
+      );
     }
 
     // Draw labeled grid lines
@@ -890,18 +1013,33 @@ class _PeqPainter extends CustomPainter {
       for (double f = 20; f < 100; f += 10) f,
       for (double f = 100; f < 1000; f += 100) f,
       for (double f = 1000; f < 10000; f += 1000) f,
-      10000, 20000,
+      10000,
+      20000,
     ];
 
     for (final freq in gridFreqs) {
       final x = _freqToX(freq, graphW);
       final thick = freq == 100 || freq == 1000 || freq == 10000;
-      canvas.drawLine(Offset(x, padTop), Offset(x, padTop + graphH),
-          thick ? thickGridPaint : gridPaint);
+      canvas.drawLine(
+        Offset(x, padTop),
+        Offset(x, padTop + graphH),
+        thick ? thickGridPaint : gridPaint,
+      );
     }
 
     // Frequency labels along bottom
-    final freqLabels = [20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0];
+    final freqLabels = [
+      20.0,
+      50.0,
+      100.0,
+      200.0,
+      500.0,
+      1000.0,
+      2000.0,
+      5000.0,
+      10000.0,
+      20000.0,
+    ];
     for (final freq in freqLabels) {
       final label = _formatFreq(freq);
       final tp = TextPainter(
@@ -930,14 +1068,28 @@ class _PeqPainter extends CustomPainter {
 
     // Draw HPF curve
     if (hiPass.enabled && hiPass.freqRaw > 0) {
-      _drawFilterCurve(canvas, graphW, graphH, hiPass.freqRaw, hiPass.slope,
-          true, const Color(0xFFF92672));
+      _drawFilterCurve(
+        canvas,
+        graphW,
+        graphH,
+        hiPass.freqRaw,
+        hiPass.slope,
+        true,
+        const Color(0xFFF92672),
+      );
     }
 
     // Draw LPF curve
     if (loPass.enabled && loPass.freqRaw < 1000) {
-      _drawFilterCurve(canvas, graphW, graphH, loPass.freqRaw, loPass.slope,
-          false, const Color(0xFF66D9EF));
+      _drawFilterCurve(
+        canvas,
+        graphW,
+        graphH,
+        loPass.freqRaw,
+        loPass.slope,
+        false,
+        const Color(0xFF66D9EF),
+      );
     }
 
     // Draw composite curve (PEQ + HPF + LPF)
@@ -976,7 +1128,8 @@ class _PeqPainter extends CustomPainter {
       tp.paint(canvas, Offset(cx - tp.width / 2, cy - tp.height / 2));
 
       if (isSelected && band.gainDb.abs() >= 0.05) {
-        final gainLabel = '${band.gainDb >= 0 ? "+" : ""}${band.gainDb.toStringAsFixed(1)} dB';
+        final gainLabel =
+            '${band.gainDb >= 0 ? "+" : ""}${band.gainDb.toStringAsFixed(1)} dB';
         final gainTp = TextPainter(
           text: TextSpan(
             text: gainLabel,
@@ -995,20 +1148,33 @@ class _PeqPainter extends CustomPainter {
         final bubbleH = gainTp.height + bubblePadV * 2;
         final above = cy - bubbleH - radius - 4;
         final bubbleY = above >= padTop ? above : cy + radius + 4;
-        final bubbleX = (cx - bubbleW / 2).clamp(padLeft, padLeft + graphW - bubbleW);
+        final bubbleX = (cx - bubbleW / 2).clamp(
+          padLeft,
+          padLeft + graphW - bubbleW,
+        );
 
         final bubbleRect = RRect.fromRectAndRadius(
           Rect.fromLTWH(bubbleX, bubbleY, bubbleW, bubbleH),
           const Radius.circular(4),
         );
         canvas.drawRRect(bubbleRect, Paint()..color = const Color(0xDD3E3D32));
-        gainTp.paint(canvas, Offset(bubbleX + bubblePadH, bubbleY + bubblePadV));
+        gainTp.paint(
+          canvas,
+          Offset(bubbleX + bubblePadH, bubbleY + bubblePadV),
+        );
       }
     }
   }
 
   /// Draw a single band's frequency response curve
-  void _drawBandCurve(Canvas canvas, PeqBand band, double graphW, double graphH, Color color, bool isSelected) {
+  void _drawBandCurve(
+    Canvas canvas,
+    PeqBand band,
+    double graphW,
+    double graphH,
+    Color color,
+    bool isSelected,
+  ) {
     final freqHz = proto.peqFreqToHz(band.freqRaw);
     final q = proto.peqRawToQ(band.qRaw);
     final gain = band.gainDb;
@@ -1042,8 +1208,15 @@ class _PeqPainter extends CustomPainter {
   }
 
   /// Draw HPF or LPF filter curve
-  void _drawFilterCurve(Canvas canvas, double graphW, double graphH,
-      int freqRaw, int slope, bool isHighPass, Color color) {
+  void _drawFilterCurve(
+    Canvas canvas,
+    double graphW,
+    double graphH,
+    int freqRaw,
+    int slope,
+    bool isHighPass,
+    Color color,
+  ) {
     final cutoffHz = proto.peqFreqToHz(freqRaw);
     final slopeDbPerOct = _slopeToDbPerOct(slope);
 
@@ -1096,8 +1269,13 @@ class _PeqPainter extends CustomPainter {
       for (int i = 0; i < bands.length; i++) {
         final band = bands[i];
         if (band.bypass) continue;
-        totalDb += _peqResponse(freq, proto.peqFreqToHz(band.freqRaw),
-            proto.peqRawToQ(band.qRaw), band.gainDb, band.type);
+        totalDb += _peqResponse(
+          freq,
+          proto.peqFreqToHz(band.freqRaw),
+          proto.peqRawToQ(band.qRaw),
+          band.gainDb,
+          band.type,
+        );
       }
 
       // Add HPF/LPF contributions
@@ -1133,16 +1311,21 @@ class _PeqPainter extends CustomPainter {
     // BW -6 through -48 (indices 0-7), LR -12 through -48 (indices 8-11),
     // BS -6 through -48 (indices 12-19)
     const slopeValues = [
-      6.0, 12.0, 18.0, 24.0, 30.0, 36.0, 42.0, 48.0,  // BW
-      12.0, 24.0, 36.0, 48.0,                            // LR
-      6.0, 12.0, 18.0, 24.0, 30.0, 36.0, 42.0, 48.0,   // BS
+      6.0, 12.0, 18.0, 24.0, 30.0, 36.0, 42.0, 48.0, // BW
+      12.0, 24.0, 36.0, 48.0, // LR
+      6.0, 12.0, 18.0, 24.0, 30.0, 36.0, 42.0, 48.0, // BS
     ];
     if (slope >= 0 && slope < slopeValues.length) return slopeValues[slope];
     return 12.0;
   }
 
   /// HPF/LPF frequency response
-  double _filterResponse(double freq, double cutoffHz, double slopeDbPerOct, bool isHighPass) {
+  double _filterResponse(
+    double freq,
+    double cutoffHz,
+    double slopeDbPerOct,
+    bool isHighPass,
+  ) {
     if (cutoffHz <= 0) return 0.0;
     if (isHighPass) {
       if (freq >= cutoffHz) return 0.0;
@@ -1154,7 +1337,13 @@ class _PeqPainter extends CustomPainter {
   }
 
   /// Approximate PEQ frequency response for a single band at a given frequency
-  double _peqResponse(double freq, double centerFreq, double q, double gainDb, int type) {
+  double _peqResponse(
+    double freq,
+    double centerFreq,
+    double q,
+    double gainDb,
+    int type,
+  ) {
     if (gainDb.abs() < 0.01 && type == 0) return 0.0;
     if (q < 0.01) return 0.0;
 

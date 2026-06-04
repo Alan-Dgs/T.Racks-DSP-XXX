@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -22,54 +23,54 @@ import 'devices/t_racks408/overlays/settings_overlay.dart';
 
 // RTA
 import 'services/rta_settings_provider.dart';
+import 'services/connection_profile_provider.dart';
 
 void main() {
-  runApp(
-    MultiProvider(
-      providers: [
-        // Services (singletons)
-        ChangeNotifierProvider(create: (_) => SocketService()),
-        Provider(create: (_) => ProtocolService()),
-        ChangeNotifierProvider(create: (_) => RtaSettingsProvider()),
+  runApp(buildApp());
+}
 
-        // State providers
-        ChangeNotifierProxyProvider<SocketService, DeviceProvider>(
-          create: (context) => DeviceProvider(
+Widget buildApp() {
+  return MultiProvider(
+    providers: [
+      // Services (singletons)
+      ChangeNotifierProvider(create: (_) => SocketService()),
+      Provider(create: (_) => ProtocolService()),
+      ChangeNotifierProvider(create: (_) => RtaSettingsProvider()),
+      ChangeNotifierProvider(create: (_) => ConnectionProfileProvider()),
+
+      // State providers
+      ChangeNotifierProxyProvider<SocketService, DeviceProvider>(
+        create: (context) => DeviceProvider(
+          context.read<SocketService>(),
+          context.read<ProtocolService>(),
+        ),
+        update: (context, socket, previous) =>
+            previous ?? DeviceProvider(socket, context.read<ProtocolService>()),
+      ),
+      ChangeNotifierProxyProvider<SocketService, ConnectionProvider>(
+        create: (context) {
+          final provider = ConnectionProvider(
             context.read<SocketService>(),
             context.read<ProtocolService>(),
-          ),
-          update: (context, socket, previous) =>
-              previous ??
-              DeviceProvider(
-                socket,
-                context.read<ProtocolService>(),
-              ),
-        ),
-        ChangeNotifierProxyProvider<SocketService, ConnectionProvider>(
-          create: (context) {
-            final provider = ConnectionProvider(
-              context.read<SocketService>(),
-              context.read<ProtocolService>(),
-            );
-            provider.deviceProvider = context.read<DeviceProvider>();
-            return provider;
-          },
-          update: (context, socket, previous) {
-            if (previous != null) {
-              previous.deviceProvider = context.read<DeviceProvider>();
-              return previous;
-            }
-            final provider = ConnectionProvider(
-              socket,
-              context.read<ProtocolService>(),
-            );
-            provider.deviceProvider = context.read<DeviceProvider>();
-            return provider;
-          },
-        ),
-      ],
-      child: const MyApp(),
-    ),
+          );
+          provider.deviceProvider = context.read<DeviceProvider>();
+          return provider;
+        },
+        update: (context, socket, previous) {
+          if (previous != null) {
+            previous.deviceProvider = context.read<DeviceProvider>();
+            return previous;
+          }
+          final provider = ConnectionProvider(
+            socket,
+            context.read<ProtocolService>(),
+          );
+          provider.deviceProvider = context.read<DeviceProvider>();
+          return provider;
+        },
+      ),
+    ],
+    child: const MyApp(),
   );
 }
 
@@ -120,10 +121,7 @@ class MyApp extends StatelessWidget {
           unselectedLabelColor: monokaiComment,
           indicatorColor: monokaiGreen,
         ),
-        cardTheme: CardThemeData(
-          color: monokaiSurface,
-          elevation: 2,
-        ),
+        cardTheme: CardThemeData(color: monokaiSurface, elevation: 2),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             backgroundColor: monokaiSurface,
@@ -143,18 +141,20 @@ class MyApp extends StatelessWidget {
         dialogTheme: const DialogThemeData(
           backgroundColor: monokaiSurface,
           titleTextStyle: TextStyle(
-              color: monokaiOrange,
-              fontSize: 20,
-              fontWeight: FontWeight.bold),
+            color: monokaiOrange,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         dropdownMenuTheme: const DropdownMenuThemeData(
           textStyle: TextStyle(color: monokaiFg),
         ),
         checkboxTheme: CheckboxThemeData(
-          fillColor: WidgetStateProperty.resolveWith((states) =>
-              states.contains(WidgetState.selected)
-                  ? monokaiGreen
-                  : Colors.transparent),
+          fillColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? monokaiGreen
+                : Colors.transparent,
+          ),
           checkColor: WidgetStateProperty.all(monokaiBg),
           side: BorderSide(color: monokaiComment),
         ),
@@ -179,10 +179,15 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   // Text controllers
-  final TextEditingController _ipController =
-      TextEditingController(text: '192.168.3.100');
-  final TextEditingController _portController =
-      TextEditingController(text: '9761');
+  final TextEditingController _ipController = TextEditingController(
+    text: '192.168.3.100',
+  );
+  final TextEditingController _portController = TextEditingController(
+    text: '9761',
+  );
+  final TextEditingController _profileNameController = TextEditingController(
+    text: 'DSP',
+  );
 
   // Debug log scroll
   final ScrollController _debugScrollController = ScrollController();
@@ -195,9 +200,18 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _showTimestamps = false;
   String? _selectedPreset;
   String? _lastSyncedPreset;
+  String? _lastAppliedConnectionProfileId;
 
   static const _tabs = [
-    'Gain', 'Gate', 'Comp', 'Limit', 'Delay', 'Matrix', 'GEQ', 'PEQ', 'RTA'
+    'Gain',
+    'Gate',
+    'Comp',
+    'Limit',
+    'Delay',
+    'Matrix',
+    'GEQ',
+    'PEQ',
+    'RTA',
   ];
 
   @override
@@ -211,6 +225,7 @@ class _MyHomePageState extends State<MyHomePage> {
     // Load saved channel aliases
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DeviceProvider>().loadAliases();
+      context.read<ConnectionProfileProvider>().load();
     });
   }
 
@@ -218,6 +233,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void dispose() {
     _ipController.dispose();
     _portController.dispose();
+    _profileNameController.dispose();
     _debugScrollController.dispose();
     super.dispose();
   }
@@ -248,10 +264,70 @@ class _MyHomePageState extends State<MyHomePage> {
     await context.read<ConnectionProvider>().disconnect();
   }
 
+  Future<void> _saveConnectionProfile() async {
+    final name = _profileNameController.text.trim();
+    final host = _ipController.text.trim();
+    final port = int.tryParse(_portController.text.trim());
+
+    if (host.isEmpty) {
+      _showError('Please enter an IP address');
+      return;
+    }
+    if (port == null || port < 1 || port > 65535) {
+      _showError('Invalid port number');
+      return;
+    }
+
+    final profiles = context.read<ConnectionProfileProvider>();
+    await profiles.saveProfile(
+      id: profiles.selectedProfileId,
+      name: name.isEmpty ? host : name,
+      host: host,
+      port: port,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Connection profile saved')));
+  }
+
+  Future<void> _deleteConnectionProfile() async {
+    final profiles = context.read<ConnectionProfileProvider>();
+    if (profiles.selectedProfileId == null) return;
+    await profiles.deleteSelectedProfile();
+    final selected = profiles.selectedProfile;
+    if (selected != null) {
+      _applyConnectionProfile(selected);
+    }
+  }
+
+  void _applyConnectionProfile(ConnectionProfile profile) {
+    _profileNameController.text = profile.name;
+    _ipController.text = profile.host;
+    _portController.text = profile.port.toString();
+    _lastAppliedConnectionProfileId = profile.id;
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
+  }
+
+  Future<void> _copyDebugLog(ConnectionProvider connectionProvider) async {
+    final logText = connectionProvider.exportDebugLogText(
+      includeTimestamps: _showTimestamps,
+    );
+    if (logText.isEmpty) {
+      _showError('No debug messages to copy');
+      return;
+    }
+
+    await Clipboard.setData(ClipboardData(text: logText));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Debug log copied')));
   }
 
   /// Format current preset with U-number, e.g. "U20: Test"
@@ -271,6 +347,15 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     final connectionProvider = context.watch<ConnectionProvider>();
     final deviceProvider = context.watch<DeviceProvider>();
+    final profileProvider = context.watch<ConnectionProfileProvider>();
+
+    final selectedConnectionProfile = profileProvider.selectedProfile;
+    if (selectedConnectionProfile != null &&
+        selectedConnectionProfile.id != _lastAppliedConnectionProfileId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _applyConnectionProfile(selectedConnectionProfile);
+      });
+    }
 
     // Sync dropdown to device preset only when the device preset changes
     final currentName = deviceProvider.currentPreset;
@@ -314,24 +399,29 @@ class _MyHomePageState extends State<MyHomePage> {
           actions: narrow
               ? [
                   IconButton(
-                    icon: Icon(_showConnect ? Icons.link_off : Icons.link,
-                        size: 20),
+                    icon: Icon(
+                      _showConnect ? Icons.link_off : Icons.link,
+                      size: 20,
+                    ),
                     tooltip: 'Connection',
                     onPressed: () =>
                         setState(() => _showConnect = !_showConnect),
                   ),
                   IconButton(
-                    icon: Icon(_showDebug ? Icons.bug_report : Icons.bug_report_outlined,
-                        size: 20),
+                    icon: Icon(
+                      _showDebug ? Icons.bug_report : Icons.bug_report_outlined,
+                      size: 20,
+                    ),
                     tooltip: 'Debug',
-                    onPressed: () =>
-                        setState(() => _showDebug = !_showDebug),
+                    onPressed: () => setState(() => _showDebug = !_showDebug),
                   ),
                   IconButton(
                     icon: const Icon(Icons.settings, size: 20),
                     tooltip: 'Settings',
                     onPressed: () => SettingsOverlay.showSettingsOverlay(
-                        context, context.read<SocketService>()),
+                      context,
+                      context.read<SocketService>(),
+                    ),
                   ),
                 ]
               : null,
@@ -360,15 +450,21 @@ class _MyHomePageState extends State<MyHomePage> {
                   Text(
                     connectionProvider.connectionStatus,
                     style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 12),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
                   ),
                   const Spacer(),
                   if (connectionProvider.isConnected) ...[
-                    Text('TX: ${connectionProvider.packetsSent}',
-                        style: const TextStyle(fontSize: 12)),
+                    Text(
+                      'TX: ${connectionProvider.packetsSent}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                     const SizedBox(width: 12),
-                    Text('RX: ${connectionProvider.packetsReceived}',
-                        style: const TextStyle(fontSize: 12)),
+                    Text(
+                      'RX: ${connectionProvider.packetsReceived}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ],
                 ],
               ),
@@ -385,6 +481,11 @@ class _MyHomePageState extends State<MyHomePage> {
                       final narrow = constraints.maxWidth < 500;
                       return Column(
                         children: [
+                          _buildConnectionProfileControls(
+                            profileProvider,
+                            narrow,
+                          ),
+                          const SizedBox(height: 8),
                           if (narrow) ...[
                             // Stacked layout for narrow screens
                             Row(
@@ -419,7 +520,9 @@ class _MyHomePageState extends State<MyHomePage> {
                               children: [
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: connectionProvider.isSocketConnected || connectionProvider.isLoading
+                                    onPressed:
+                                        connectionProvider.isSocketConnected ||
+                                            connectionProvider.isLoading
                                         ? null
                                         : _connect,
                                     child: const Text('Connect'),
@@ -428,7 +531,9 @@ class _MyHomePageState extends State<MyHomePage> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: connectionProvider.isSocketConnected || connectionProvider.isLoading
+                                    onPressed:
+                                        connectionProvider.isSocketConnected ||
+                                            connectionProvider.isLoading
                                         ? _disconnect
                                         : null,
                                     child: const Text('Disconnect'),
@@ -465,14 +570,16 @@ class _MyHomePageState extends State<MyHomePage> {
                                 ),
                                 const SizedBox(width: 8),
                                 ElevatedButton(
-                                  onPressed: connectionProvider.isSocketConnected
+                                  onPressed:
+                                      connectionProvider.isSocketConnected
                                       ? null
                                       : _connect,
                                   child: const Text('Connect'),
                                 ),
                                 const SizedBox(width: 4),
                                 ElevatedButton(
-                                  onPressed: connectionProvider.isSocketConnected
+                                  onPressed:
+                                      connectionProvider.isSocketConnected
                                       ? _disconnect
                                       : null,
                                   child: const Text('Disconnect'),
@@ -493,71 +600,121 @@ class _MyHomePageState extends State<MyHomePage> {
                                           : null,
                                       hint: const Text('Select Preset'),
                                       isExpanded: true,
-                                      items: deviceProvider.presets.entries
-                                          .map((entry) {
-                                        final label =
-                                            'U${(entry.key + 1).toString().padLeft(2, '0')}';
-                                        return DropdownMenuItem<int>(
-                                          value: entry.key,
-                                          child: Text('$label: ${entry.value}'),
-                                        );
-                                      }).toList()
-                                        ..sort(
-                                            (a, b) => a.value!.compareTo(b.value!)),
+                                      items:
+                                          deviceProvider.presets.entries.map((
+                                            entry,
+                                          ) {
+                                            final label =
+                                                'U${(entry.key + 1).toString().padLeft(2, '0')}';
+                                            return DropdownMenuItem<int>(
+                                              value: entry.key,
+                                              child: Text(
+                                                '$label: ${entry.value}',
+                                              ),
+                                            );
+                                          }).toList()..sort(
+                                            (a, b) =>
+                                                a.value!.compareTo(b.value!),
+                                          ),
                                       onChanged: (value) => setState(
-                                          () => _selectedPreset = value?.toString()),
+                                        () =>
+                                            _selectedPreset = value?.toString(),
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   ElevatedButton(
                                     onPressed: _selectedPreset != null
                                         ? () async {
-                                            final index = int.tryParse(_selectedPreset!);
-                                            if (index == null) return;
-                                            final name = deviceProvider.presets[index] ?? 'Preset';
-                                            final uNum = 'U${(index + 1).toString().padLeft(2, '0')}';
-                                            final confirmed = await showDialog<bool>(
-                                              context: context,
-                                              builder: (ctx) => AlertDialog(
-                                                title: const Text('Save Preset'),
-                                                content: Text('Save current settings to $uNum "$name"?'),
-                                                actions: [
-                                                  TextButton(
-                                                    onPressed: () => Navigator.pop(ctx, false),
-                                                    child: const Text('Cancel'),
-                                                  ),
-                                                  TextButton(
-                                                    onPressed: () => Navigator.pop(ctx, true),
-                                                    child: const Text('Save'),
-                                                  ),
-                                                ],
-                                              ),
+                                            final index = int.tryParse(
+                                              _selectedPreset!,
                                             );
-                                            if (confirmed == true && context.mounted) {
-                                              context.read<ConnectionProvider>().savePreset(index, name);
+                                            if (index == null) return;
+                                            final name =
+                                                deviceProvider.presets[index] ??
+                                                'Preset';
+                                            final uNum =
+                                                'U${(index + 1).toString().padLeft(2, '0')}';
+                                            final confirmed =
+                                                await showDialog<bool>(
+                                                  context: context,
+                                                  builder: (ctx) => AlertDialog(
+                                                    title: const Text(
+                                                      'Save Preset',
+                                                    ),
+                                                    content: Text(
+                                                      'Save current settings to $uNum "$name"?',
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                              ctx,
+                                                              false,
+                                                            ),
+                                                        child: const Text(
+                                                          'Cancel',
+                                                        ),
+                                                      ),
+                                                      TextButton(
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                              ctx,
+                                                              true,
+                                                            ),
+                                                        child: const Text(
+                                                          'Save',
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                            if (confirmed == true &&
+                                                context.mounted) {
+                                              context
+                                                  .read<ConnectionProvider>()
+                                                  .savePreset(index, name);
                                             }
                                           }
                                         : null,
-                                    child: const Text('Save', style: TextStyle(fontSize: 12)),
+                                    child: const Text(
+                                      'Save',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                   ElevatedButton(
                                     onPressed: _selectedPreset != null
                                         ? () {
-                                            final index = int.tryParse(_selectedPreset!);
+                                            final index = int.tryParse(
+                                              _selectedPreset!,
+                                            );
                                             if (index != null) {
-                                              context.read<ConnectionProvider>().loadPreset(index);
+                                              context
+                                                  .read<ConnectionProvider>()
+                                                  .loadPreset(index);
                                             }
                                           }
                                         : null,
-                                    child: const Text('Load', style: TextStyle(fontSize: 12)),
+                                    child: const Text(
+                                      'Load',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
                                   ),
                                   if (!narrow) ...[
                                     const SizedBox(width: 16),
-                                    const Icon(Icons.music_note,
-                                        color: Color(0xFFA6E22E)),
+                                    const Icon(
+                                      Icons.music_note,
+                                      color: Color(0xFFA6E22E),
+                                    ),
                                     const SizedBox(width: 4),
-                                    const Text('Current: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                    const Text(
+                                      'Current: ',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
                                     Text(
                                       _currentPresetLabel(deviceProvider),
                                       style: const TextStyle(fontSize: 12),
@@ -571,10 +728,19 @@ class _MyHomePageState extends State<MyHomePage> {
                               padding: const EdgeInsets.only(top: 4),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.music_note,
-                                      color: Color(0xFFA6E22E), size: 16),
+                                  const Icon(
+                                    Icons.music_note,
+                                    color: Color(0xFFA6E22E),
+                                    size: 16,
+                                  ),
                                   const SizedBox(width: 4),
-                                  const Text('Current: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  const Text(
+                                    'Current: ',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                   Expanded(
                                     child: Text(
                                       _currentPresetLabel(deviceProvider),
@@ -582,7 +748,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                ]
+                                ],
                               ),
                             ),
                         ],
@@ -618,7 +784,8 @@ class _MyHomePageState extends State<MyHomePage> {
                       return Center(child: Text('$name Tab'));
                     }).toList(),
                   ),
-                  if (!connectionProvider.isConnected || connectionProvider.isLoading)
+                  if (!connectionProvider.isConnected ||
+                      connectionProvider.isLoading)
                     Container(
                       color: Colors.black54,
                       child: Center(
@@ -636,22 +803,29 @@ class _MyHomePageState extends State<MyHomePage> {
                                     backgroundColor: const Color(0xFF75715E),
                                     strokeWidth: 4,
                                   ),
-                              )],
+                                ),
+                              ],
                               const SizedBox(height: 16),
                               Text(
-                                  connectionProvider.isSocketConnected && connectionProvider.isLoading
+                                connectionProvider.isSocketConnected &&
+                                        connectionProvider.isLoading
                                     ? 'Initializing... ${(connectionProvider.initProgress * 100).toInt()}%'
                                     : "Establishing Connection...",
-                                  style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white)),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ] else
-                              const Text('Not Connected',
-                                  style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white70)),
+                              const Text(
+                                'Not Connected',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white70,
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -665,17 +839,23 @@ class _MyHomePageState extends State<MyHomePage> {
               SizedBox(
                 height: 200,
                 child: Card(
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   child: Column(
                     children: [
                       Padding(
                         padding: const EdgeInsets.all(6),
                         child: Row(
                           children: [
-                            const Text('Debug Messages',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 12)),
+                            const Text(
+                              'Debug Messages',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
                             const Spacer(),
                             SizedBox(
                               height: 24,
@@ -685,28 +865,39 @@ class _MyHomePageState extends State<MyHomePage> {
                                   _debugCheckbox(
                                     value: connectionProvider.showRx,
                                     label: 'Rx',
-                                    onChanged: () => connectionProvider.toggleShowRx(),
+                                    onChanged: () =>
+                                        connectionProvider.toggleShowRx(),
                                   ),
                                   _debugCheckbox(
                                     value: connectionProvider.showTx,
                                     label: 'Tx',
-                                    onChanged: () => connectionProvider.toggleShowTx(),
+                                    onChanged: () =>
+                                        connectionProvider.toggleShowTx(),
                                   ),
                                   _debugCheckbox(
                                     value: connectionProvider.showDecoded,
                                     label: 'Decode',
-                                    onChanged: () => connectionProvider.toggleShowDecoded(),
+                                    onChanged: () =>
+                                        connectionProvider.toggleShowDecoded(),
                                   ),
                                   _debugCheckbox(
                                     value: _showTimestamps,
                                     label: 'Time',
                                     onChanged: () => setState(
-                                        () => _showTimestamps = !_showTimestamps),
+                                      () => _showTimestamps = !_showTimestamps,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                             IconButton(
+                              tooltip: 'Copy debug log',
+                              icon: const Icon(Icons.copy, size: 18),
+                              onPressed: () =>
+                                  _copyDebugLog(connectionProvider),
+                            ),
+                            IconButton(
+                              tooltip: 'Clear debug messages',
                               icon: const Icon(Icons.clear, size: 18),
                               onPressed: () => context
                                   .read<ConnectionProvider>()
@@ -719,18 +910,21 @@ class _MyHomePageState extends State<MyHomePage> {
                         child: ListView.builder(
                           controller: _debugScrollController,
                           reverse: true,
-                          itemCount:
-                              connectionProvider.debugEntries.length,
+                          itemCount: connectionProvider.debugEntries.length,
                           itemBuilder: (context, index) {
                             final entry =
                                 connectionProvider.debugEntries[index];
-                            final msg = entry.display(connectionProvider.showDecoded);
+                            final msg = entry.display(
+                              connectionProvider.showDecoded,
+                            );
                             final display = _showTimestamps
                                 ? '[${entry.timestamp.toStringAsFixed(4)}] $msg'
                                 : msg;
                             return Padding(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 1),
+                                horizontal: 8,
+                                vertical: 1,
+                              ),
                               child: Text(
                                 display,
                                 style: const TextStyle(fontSize: 10),
@@ -755,29 +949,39 @@ class _MyHomePageState extends State<MyHomePage> {
                       onPressed: () =>
                           setState(() => _showConnect = !_showConnect),
                       icon: Icon(
-                          _showConnect
-                              ? Icons.keyboard_arrow_up
-                              : Icons.keyboard_arrow_down,
-                          size: 18),
-                      label: const Text('Connection',
-                          style: TextStyle(fontSize: 12)),
+                        _showConnect
+                            ? Icons.keyboard_arrow_up
+                            : Icons.keyboard_arrow_down,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'Connection',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     ElevatedButton.icon(
-                      onPressed: () =>
-                          setState(() => _showDebug = !_showDebug),
+                      onPressed: () => setState(() => _showDebug = !_showDebug),
                       icon: Icon(
-                          _showDebug
-                              ? Icons.keyboard_arrow_up
-                              : Icons.keyboard_arrow_down,
-                          size: 18),
-                      label: const Text('Debug',
-                          style: TextStyle(fontSize: 12)),
+                        _showDebug
+                            ? Icons.keyboard_arrow_up
+                            : Icons.keyboard_arrow_down,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'Debug',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     ElevatedButton.icon(
-                      onPressed: () => SettingsOverlay.showSettingsOverlay(context, context.read<SocketService>()),
+                      onPressed: () => SettingsOverlay.showSettingsOverlay(
+                        context,
+                        context.read<SocketService>(),
+                      ),
                       icon: const Icon(Icons.settings, size: 18),
-                      label: const Text('Settings',
-                          style: TextStyle(fontSize: 12)),
+                      label: const Text(
+                        'Settings',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                   ],
                 ),
@@ -803,6 +1007,84 @@ class _MyHomePageState extends State<MyHomePage> {
           visualDensity: VisualDensity.compact,
         ),
         Text(label, style: const TextStyle(fontSize: 11)),
+      ],
+    );
+  }
+
+  Widget _buildConnectionProfileControls(
+    ConnectionProfileProvider profiles,
+    bool narrow,
+  ) {
+    final profileItems = profiles.profiles
+        .map(
+          (profile) => DropdownMenuItem<String>(
+            value: profile.id,
+            child: Text('${profile.name} (${profile.host}:${profile.port})'),
+          ),
+        )
+        .toList();
+
+    final profileDropdown = DropdownButton<String>(
+      value: profiles.selectedProfileId,
+      hint: const Text('Connection Profile'),
+      isExpanded: true,
+      items: profileItems,
+      onChanged: (id) async {
+        await profiles.selectProfile(id);
+        final selected = profiles.selectedProfile;
+        if (selected != null) _applyConnectionProfile(selected);
+      },
+    );
+
+    final nameField = TextField(
+      controller: _profileNameController,
+      decoration: const InputDecoration(
+        labelText: 'Profile Name',
+        border: OutlineInputBorder(),
+        isDense: true,
+      ),
+    );
+
+    final buttons = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: 'Save connection profile',
+          onPressed: _saveConnectionProfile,
+          icon: const Icon(Icons.save, size: 20),
+        ),
+        IconButton(
+          tooltip: 'Delete selected connection profile',
+          onPressed: profiles.selectedProfileId == null
+              ? null
+              : _deleteConnectionProfile,
+          icon: const Icon(Icons.delete_outline, size: 20),
+        ),
+      ],
+    );
+
+    if (narrow) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: profileDropdown),
+              buttons,
+            ],
+          ),
+          const SizedBox(height: 8),
+          nameField,
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        SizedBox(width: 280, child: profileDropdown),
+        const SizedBox(width: 8),
+        Expanded(child: nameField),
+        const SizedBox(width: 4),
+        buttons,
       ],
     );
   }

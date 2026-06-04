@@ -1,6 +1,6 @@
 // Matrix Tab Widget
 //
-// 8x4 matrix grid: 8 output columns x 4 input rows.
+// Matrix grid using the active device profile.
 // Each cell toggles routing on tap and shows a clickable dB gain value.
 //
 // Matrix routing protocol (from PCAP analysis):
@@ -17,13 +17,6 @@ class MatrixTab extends StatelessWidget {
 
   const MatrixTab({super.key, required this.deviceProvider});
 
-  static const _outputs = [
-    'Out 1', 'Out 2', 'Out 3', 'Out 4',
-    'Out 5', 'Out 6', 'Out 7', 'Out 8',
-  ];
-
-  static const _inputs = ['In A', 'In B', 'In C', 'In D'];
-
   static const _labelWidth = 56.0;
   static const _headerHeight = 20.0;
   static const _gap = 3.0;
@@ -34,16 +27,24 @@ class MatrixTab extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       child: LayoutBuilder(
         builder: (context, constraints) {
+          final outputs = deviceProvider.outputChannels;
+          final inputs = deviceProvider.inputChannels;
+          final outputGapCount = outputs.length > 1 ? outputs.length - 1 : 0;
+          final inputGapCount = inputs.length > 1 ? inputs.length - 1 : 0;
+
           // Compute square cell size from available space
           final gridWidth = constraints.maxWidth - _labelWidth;
           final gridHeight = constraints.maxHeight - _headerHeight - _gap;
-          final cellFromWidth = (gridWidth - _gap * 7) / 8;
-          final cellFromHeight = (gridHeight - _gap * 3) / 4;
+          final cellFromWidth =
+              (gridWidth - _gap * outputGapCount) / outputs.length;
+          final cellFromHeight =
+              (gridHeight - _gap * inputGapCount) / inputs.length;
           final cellSize = cellFromWidth < cellFromHeight
               ? cellFromWidth
               : cellFromHeight;
 
-          final totalGridWidth = cellSize * 8 + _gap * 7;
+          final totalGridWidth =
+              cellSize * outputs.length + _gap * outputGapCount;
 
           return Center(
             child: Column(
@@ -59,9 +60,11 @@ class MatrixTab extends StatelessWidget {
                       SizedBox(
                         width: totalGridWidth,
                         child: Row(
-                          children: _outputs.map((output) {
+                          children: outputs.map((output) {
                             return SizedBox(
-                              width: cellSize + (output != _outputs.last ? _gap : 0),
+                              width:
+                                  cellSize +
+                                  (output != outputs.last ? _gap : 0),
                               child: Text(
                                 deviceProvider.getAlias(output),
                                 textAlign: TextAlign.center,
@@ -80,10 +83,12 @@ class MatrixTab extends StatelessWidget {
                 ),
                 SizedBox(height: _gap),
                 // 4 input rows
-                ...List.generate(_inputs.length, (ri) {
-                  final input = _inputs[ri];
+                ...List.generate(inputs.length, (ri) {
+                  final input = inputs[ri];
                   return Padding(
-                    padding: EdgeInsets.only(bottom: ri < 3 ? _gap : 0),
+                    padding: EdgeInsets.only(
+                      bottom: ri < inputs.length - 1 ? _gap : 0,
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -105,12 +110,20 @@ class MatrixTab extends StatelessWidget {
                             ),
                           ),
                         ),
-                        ...List.generate(_outputs.length, (ci) {
-                          final output = _outputs[ci];
-                          final enabled = deviceProvider.getMatrixEnabled(output, input);
-                          final gain = deviceProvider.getMatrixGain(output, input);
+                        ...List.generate(outputs.length, (ci) {
+                          final output = outputs[ci];
+                          final enabled = deviceProvider.getMatrixEnabled(
+                            output,
+                            input,
+                          );
+                          final gain = deviceProvider.getMatrixGain(
+                            output,
+                            input,
+                          );
                           return Padding(
-                            padding: EdgeInsets.only(right: ci < 7 ? _gap : 0),
+                            padding: EdgeInsets.only(
+                              right: ci < outputs.length - 1 ? _gap : 0,
+                            ),
                             child: SizedBox(
                               width: cellSize,
                               height: cellSize,
@@ -166,14 +179,10 @@ class _MatrixCell extends StatelessWidget {
       onTap: () => deviceProvider.toggleMatrixInput(output, input),
       child: Container(
         decoration: BoxDecoration(
-          color: enabled
-              ? const Color(0xFFA6E22E)
-              : const Color(0xFF272822),
+          color: enabled ? const Color(0xFFA6E22E) : const Color(0xFF272822),
           borderRadius: BorderRadius.circular(4),
           border: Border.all(
-            color: enabled
-                ? const Color(0xFFA6E22E)
-                : const Color(0xFF75715E),
+            color: enabled ? const Color(0xFFA6E22E) : const Color(0xFF75715E),
             width: 0.5,
           ),
         ),
@@ -210,8 +219,8 @@ class _MatrixCell extends StatelessWidget {
                     color: enabled
                         ? const Color(0xFF272822).withAlpha(200)
                         : (gain == 0.0
-                            ? const Color(0xFF75715E)
-                            : const Color(0xFFFD971F)),
+                              ? const Color(0xFF75715E)
+                              : const Color(0xFFFD971F)),
                   ),
                 ),
               ),
@@ -232,8 +241,10 @@ class _MatrixCell extends StatelessWidget {
         title: Text('$input \u2192 $output'),
         content: TextField(
           controller: controller,
-          keyboardType:
-              const TextInputType.numberWithOptions(decimal: true, signed: true),
+          keyboardType: const TextInputType.numberWithOptions(
+            decimal: true,
+            signed: true,
+          ),
           decoration: const InputDecoration(
             labelText: 'dB (-60.0 to 0.0)',
             border: OutlineInputBorder(),

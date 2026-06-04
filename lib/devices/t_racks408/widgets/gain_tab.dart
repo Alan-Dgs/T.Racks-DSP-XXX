@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../providers/device_provider.dart';
 
@@ -30,6 +31,8 @@ class _GainTabState extends State<GainTab> {
     final pad = narrow ? 4.0 : 12.0;
     final gap = narrow ? 8.0 : 24.0;
     final headerSize = narrow ? 14.0 : 18.0;
+    final inputs = deviceProvider.inputChannels;
+    final outputs = deviceProvider.outputChannels;
 
     if (narrow) {
       // Mobile: 4 faders visible at once, scroll for the rest
@@ -37,8 +40,11 @@ class _GainTabState extends State<GainTab> {
       final faderWidth = (screenWidth - pad * 2 - gap) / 4;
       return Padding(
         padding: EdgeInsets.only(
-            left: pad, right: pad, top: pad,
-            bottom: pad + MediaQuery.of(context).viewPadding.bottom),
+          left: pad,
+          right: pad,
+          top: pad,
+          bottom: pad + MediaQuery.of(context).viewPadding.bottom,
+        ),
         child: Column(
           children: [
             Expanded(
@@ -46,23 +52,26 @@ class _GainTabState extends State<GainTab> {
                 controller: _scrollController,
                 scrollDirection: Axis.horizontal,
                 child: SizedBox(
-                  width: faderWidth * 12 + gap,
+                  width: faderWidth * (inputs.length + outputs.length) + gap,
                   height: double.infinity,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Input channels
-                      ...['In A', 'In B', 'In C', 'In D'].map((ch) => SizedBox(
-                            width: faderWidth,
-                            child: _buildVerticalFader(context, ch, narrow),
-                          )),
+                      ...inputs.map(
+                        (ch) => SizedBox(
+                          width: faderWidth,
+                          child: _buildVerticalFader(context, ch, narrow),
+                        ),
+                      ),
                       SizedBox(width: gap),
                       // Output channels
-                      ...['Out 1', 'Out 2', 'Out 3', 'Out 4',
-                          'Out 5', 'Out 6', 'Out 7', 'Out 8'].map((ch) => SizedBox(
-                            width: faderWidth,
-                            child: _buildVerticalFader(context, ch, narrow),
-                          )),
+                      ...outputs.map(
+                        (ch) => SizedBox(
+                          width: faderWidth,
+                          child: _buildVerticalFader(context, ch, narrow),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -86,14 +95,18 @@ class _GainTabState extends State<GainTab> {
           Expanded(
             child: Column(
               children: [
-                Text('Inputs',
-                    style: TextStyle(
-                        fontSize: headerSize, fontWeight: FontWeight.bold)),
+                Text(
+                  'Inputs',
+                  style: TextStyle(
+                    fontSize: headerSize,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Expanded(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: ['In A', 'In B', 'In C', 'In D']
+                    children: inputs
                         .map((ch) => _buildVerticalFader(context, ch, narrow))
                         .toList(),
                   ),
@@ -107,17 +120,18 @@ class _GainTabState extends State<GainTab> {
             flex: 2,
             child: Column(
               children: [
-                Text('Outputs',
-                    style: TextStyle(
-                        fontSize: headerSize, fontWeight: FontWeight.bold)),
+                Text(
+                  'Outputs',
+                  style: TextStyle(
+                    fontSize: headerSize,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Expanded(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      'Out 1', 'Out 2', 'Out 3', 'Out 4',
-                      'Out 5', 'Out 6', 'Out 7', 'Out 8'
-                    ]
+                    children: outputs
                         .map((ch) => _buildVerticalFader(context, ch, narrow))
                         .toList(),
                   ),
@@ -130,7 +144,11 @@ class _GainTabState extends State<GainTab> {
     );
   }
 
-  Widget _buildVerticalFader(BuildContext context, String channel, bool narrow) {
+  Widget _buildVerticalFader(
+    BuildContext context,
+    String channel,
+    bool narrow,
+  ) {
     final isInput = channel.startsWith('In ');
     final gain = isInput
         ? deviceProvider.getInputGain(channel)
@@ -168,8 +186,9 @@ class _GainTabState extends State<GainTab> {
                   onPointerSignal: (signal) {
                     if (signal is PointerScrollEvent) {
                       final stepSize = gain < -20.0 ? 0.5 : 0.1;
-                      final delta =
-                          signal.scrollDelta.dy > 0 ? -stepSize : stepSize;
+                      final delta = signal.scrollDelta.dy > 0
+                          ? -stepSize
+                          : stepSize;
                       final newValue = (gain + delta).clamp(-60.0, 12.0);
                       deviceProvider.setGain(channel, newValue);
                     }
@@ -188,7 +207,8 @@ class _GainTabState extends State<GainTab> {
                           thumbColor: Colors.white,
                           overlayColor: Colors.white.withAlpha(30),
                           thumbShape: RoundSliderThumbShape(
-                              enabledThumbRadius: narrow ? 8 : 6),
+                            enabledThumbRadius: narrow ? 8 : 6,
+                          ),
                         ),
                         child: Slider(
                           value: gain,
@@ -212,11 +232,14 @@ class _GainTabState extends State<GainTab> {
         // Channel label (clickable to rename)
         GestureDetector(
           onTap: () => _showRenameDialog(context, channel),
-          child: Text(deviceProvider.getAlias(channel),
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: narrow ? 12 : 11),
-              overflow: TextOverflow.ellipsis),
+          child: Text(
+            deviceProvider.getAlias(channel),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: narrow ? 12 : 11,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         const SizedBox(height: 4),
         // Clickable dB display
@@ -224,16 +247,21 @@ class _GainTabState extends State<GainTab> {
           onTap: () => _showDbInputDialog(context, channel, gain),
           child: Container(
             padding: EdgeInsets.symmetric(
-                horizontal: narrow ? 4 : 6, vertical: narrow ? 4 : 3),
+              horizontal: narrow ? 4 : 6,
+              vertical: narrow ? 4 : 3,
+            ),
             decoration: BoxDecoration(
               border: Border.all(color: const Color(0xFF75715E)),
               borderRadius: BorderRadius.circular(4),
               color: const Color(0xFF3E3D32),
             ),
-            child: Text('${gain.toStringAsFixed(1)} dB',
-                style: TextStyle(
-                    fontSize: narrow ? 11 : 10,
-                    color: const Color(0xFFF8F8F2))),
+            child: Text(
+              '${gain.toStringAsFixed(1)} dB',
+              style: TextStyle(
+                fontSize: narrow ? 11 : 10,
+                color: const Color(0xFFF8F8F2),
+              ),
+            ),
           ),
         ),
         SizedBox(height: narrow ? 6 : 4),
@@ -251,12 +279,13 @@ class _GainTabState extends State<GainTab> {
                     : const Color(0xFFA6E22E),
                 foregroundColor: const Color(0xFF272822),
                 padding: EdgeInsets.symmetric(
-                    horizontal: narrow ? 2 : 4, vertical: 2),
+                  horizontal: narrow ? 2 : 4,
+                  vertical: 2,
+                ),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text('Mute',
-                  style: TextStyle(fontSize: narrow ? 12 : 10)),
+              child: Text('Mute', style: TextStyle(fontSize: narrow ? 12 : 10)),
             ),
           ),
         ),
@@ -277,12 +306,16 @@ class _GainTabState extends State<GainTab> {
                     ? const Color(0xFF272822)
                     : const Color(0xFFF8F8F2),
                 padding: EdgeInsets.symmetric(
-                    horizontal: narrow ? 2 : 4, vertical: 2),
+                  horizontal: narrow ? 2 : 4,
+                  vertical: 2,
+                ),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text(isInverted ? 'Inverse' : 'Normal',
-                  style: TextStyle(fontSize: narrow ? 12 : 10)),
+              child: Text(
+                isInverted ? 'Inverse' : 'Normal',
+                style: TextStyle(fontSize: narrow ? 12 : 10),
+              ),
             ),
           ),
         ),
@@ -302,8 +335,9 @@ class _GainTabState extends State<GainTab> {
         title: Text('Rename $channel'),
         content: TextField(
           controller: controller,
+          inputFormatters: [LengthLimitingTextInputFormatter(8)],
           decoration: const InputDecoration(
-            labelText: 'Alias',
+            labelText: 'Name (8 chars max)',
             border: OutlineInputBorder(),
           ),
           autofocus: true,
@@ -342,9 +376,13 @@ class _GainTabState extends State<GainTab> {
   }
 
   void _showDbInputDialog(
-      BuildContext context, String channel, double currentDb) {
-    final controller =
-        TextEditingController(text: currentDb.toStringAsFixed(1));
+    BuildContext context,
+    String channel,
+    double currentDb,
+  ) {
+    final controller = TextEditingController(
+      text: currentDb.toStringAsFixed(1),
+    );
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -352,7 +390,9 @@ class _GainTabState extends State<GainTab> {
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(
-              decimal: true, signed: true),
+            decimal: true,
+            signed: true,
+          ),
           decoration: const InputDecoration(
             labelText: 'dB (-60.0 to 12.0)',
             border: OutlineInputBorder(),
@@ -417,7 +457,10 @@ class MeterBar extends StatelessWidget {
     if (level <= _noiseFloor) {
       fill = 0.0;
     } else {
-      fill = ((level - _noiseFloor) / (_maxLevel - _noiseFloor)).clamp(0.0, 1.0);
+      fill = ((level - _noiseFloor) / (_maxLevel - _noiseFloor)).clamp(
+        0.0,
+        1.0,
+      );
     }
 
     return LayoutBuilder(
@@ -492,12 +535,15 @@ class _ScrollIndicator extends StatelessWidget {
                     position.maxScrollExtent <= 0) {
                   return const SizedBox.shrink();
                 }
-                final viewFraction = position.viewportDimension /
+                final viewFraction =
+                    position.viewportDimension /
                     (position.maxScrollExtent + position.viewportDimension);
-                final thumbWidth =
-                    (constraints.maxWidth * viewFraction).clamp(24.0, constraints.maxWidth);
-                final scrollFraction = controller.offset /
-                    position.maxScrollExtent;
+                final thumbWidth = (constraints.maxWidth * viewFraction).clamp(
+                  24.0,
+                  constraints.maxWidth,
+                );
+                final scrollFraction =
+                    controller.offset / position.maxScrollExtent;
                 final thumbOffset =
                     scrollFraction * (constraints.maxWidth - thumbWidth);
 

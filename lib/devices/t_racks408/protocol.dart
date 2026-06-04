@@ -2,6 +2,8 @@
 //
 // A class containing command strings for communicating with the Thomann t.racks DSP
 // 408.
+//
+// Captured command notes for missing editor features live in docs/devices.
 
 class TRacksProto {
 

@@ -12,9 +12,37 @@ import '../providers/device_provider.dart';
 
 // 31-band ISO 1/3-octave center frequencies
 const List<double> _bandFrequencies = [
-  20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160,
-  200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600,
-  2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000,
+  20,
+  25,
+  31.5,
+  40,
+  50,
+  63,
+  80,
+  100,
+  125,
+  160,
+  200,
+  250,
+  315,
+  400,
+  500,
+  630,
+  800,
+  1000,
+  1250,
+  1600,
+  2000,
+  2500,
+  3150,
+  4000,
+  5000,
+  6300,
+  8000,
+  10000,
+  12500,
+  16000,
+  20000,
 ];
 
 String _formatFreq(double freq) {
@@ -22,9 +50,7 @@ String _formatFreq(double freq) {
     final k = freq / 1000;
     return k == k.truncateToDouble() ? '${k.toInt()}K' : '${k}K';
   }
-  return freq == freq.truncateToDouble()
-      ? '${freq.toInt()}'
-      : '$freq';
+  return freq == freq.truncateToDouble() ? '${freq.toInt()}' : '$freq';
 }
 
 class GeqTab extends StatefulWidget {
@@ -74,9 +100,9 @@ class _GeqTabState extends State<GeqTab> {
       } catch (e) {
         svc.release();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to start RTA: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to start RTA: $e')));
         }
       }
     }
@@ -98,7 +124,9 @@ class _GeqTabState extends State<GeqTab> {
     return ListenableBuilder(
       listenable: deviceProvider,
       builder: (context, _) {
-        final bands = deviceProvider.getGeqBands(_selectedChannels.first);
+        final selectedChannel = _selectedChannels.first;
+        final bands = deviceProvider.getGeqBands(selectedChannel);
+        final bypass = deviceProvider.getGeqBypass(selectedChannel);
         return Column(
           children: [
             // Graph area
@@ -124,15 +152,23 @@ class _GeqTabState extends State<GeqTab> {
                                     bands: bands,
                                     drawMode: _drawMode,
                                     activeBandIndex: _activeBandIndex,
-                                    rtaMagnitudes: _rtaEnabled ? _rtaService?.magnitudes : null,
-                                    rtaPeaks: _rtaEnabled ? _rtaService?.peaks : null,
+                                    rtaMagnitudes: _rtaEnabled
+                                        ? _rtaService?.magnitudes
+                                        : null,
+                                    rtaPeaks: _rtaEnabled
+                                        ? _rtaService?.peaks
+                                        : null,
                                     width: graphWidth,
                                     height: innerConstraints.maxHeight,
                                     narrow: true,
                                     onBandChanged: (index, dB) {
                                       setState(() => _activeBandIndex = index);
                                       for (final ch in _selectedChannels) {
-                                        deviceProvider.setGeqBand(ch, index, dB);
+                                        deviceProvider.setGeqBand(
+                                          ch,
+                                          index,
+                                          dB,
+                                        );
                                       }
                                     },
                                     onBandReset: (index) {
@@ -141,8 +177,7 @@ class _GeqTabState extends State<GeqTab> {
                                       }
                                     },
                                     onDragEnd: () {
-                                      setState(
-                                          () => _activeBandIndex = null);
+                                      setState(() => _activeBandIndex = null);
                                     },
                                   );
                                 },
@@ -153,8 +188,9 @@ class _GeqTabState extends State<GeqTab> {
                         const SizedBox(height: 4),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child:
-                              _ScrollIndicator(controller: _scrollController),
+                          child: _ScrollIndicator(
+                            controller: _scrollController,
+                          ),
                         ),
                       ],
                     );
@@ -201,10 +237,23 @@ class _GeqTabState extends State<GeqTab> {
                     },
                   ),
                   const SizedBox(width: 8),
+                  _ActionButton(
+                    label: bypass ? 'Bypass On' : 'Bypass',
+                    active: bypass,
+                    onPressed: () {
+                      for (final ch in _selectedChannels) {
+                        deviceProvider.setGeqBypass(ch, !bypass);
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 8),
                   GestureDetector(
                     onTap: _toggleRta,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: _rtaEnabled
                             ? const Color(0xFF66D9EF)
@@ -228,10 +277,13 @@ class _GeqTabState extends State<GeqTab> {
             ),
             // Channel selector
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12)
-                  .copyWith(bottom: narrow ? 6 + MediaQuery.of(context).viewPadding.bottom : 10),
+              padding: EdgeInsets.symmetric(horizontal: 12).copyWith(
+                bottom: narrow
+                    ? 6 + MediaQuery.of(context).viewPadding.bottom
+                    : 10,
+              ),
               child: Row(
-                children: ['In A', 'In B', 'In C', 'In D'].map((ch) {
+                children: deviceProvider.inputChannels.map((ch) {
                   final active = _selectedChannels.contains(ch);
                   return Expanded(
                     child: Padding(
@@ -284,10 +336,12 @@ class _GeqTabState extends State<GeqTab> {
 class _ActionButton extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
+  final bool active;
 
   const _ActionButton({
     required this.label,
     required this.onPressed,
+    this.active = false,
   });
 
   @override
@@ -297,7 +351,7 @@ class _ActionButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFF3E3D32),
+          color: active ? const Color(0xFFF92672) : const Color(0xFF3E3D32),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
@@ -339,10 +393,13 @@ class _ScrollIndicator extends StatelessWidget {
                     position.maxScrollExtent <= 0) {
                   return const SizedBox.shrink();
                 }
-                final viewFraction = position.viewportDimension /
+                final viewFraction =
+                    position.viewportDimension /
                     (position.maxScrollExtent + position.viewportDimension);
-                final thumbWidth = (constraints.maxWidth * viewFraction)
-                    .clamp(24.0, constraints.maxWidth);
+                final thumbWidth = (constraints.maxWidth * viewFraction).clamp(
+                  24.0,
+                  constraints.maxWidth,
+                );
                 final scrollFraction =
                     controller.offset / position.maxScrollExtent;
                 final thumbOffset =
@@ -390,12 +447,10 @@ final double _logMax = math.log(_maxFreq);
 final double _logRange = _logMax - _logMin;
 
 /// Map a frequency to a normalized 0..1 position on the log axis.
-double _freqToNorm(double freq) =>
-    (math.log(freq) - _logMin) / _logRange;
+double _freqToNorm(double freq) => (math.log(freq) - _logMin) / _logRange;
 
 /// Map a normalized 0..1 position back to frequency.
-double _normToFreq(double norm) =>
-    math.exp(_logMin + norm * _logRange);
+double _normToFreq(double norm) => math.exp(_logMin + norm * _logRange);
 
 // ─── Graph + band interaction ───
 
@@ -478,10 +533,12 @@ class _GeqGraph extends StatelessWidget {
         onPanStart: drawMode ? (d) => _handleDrag(d.localPosition) : null,
         onPanUpdate: drawMode ? (d) => _handleDrag(d.localPosition) : null,
         onPanEnd: drawMode ? (_) => onDragEnd() : null,
-        onVerticalDragStart:
-            !drawMode ? (d) => _handleDrag(d.localPosition) : null,
-        onVerticalDragUpdate:
-            !drawMode ? (d) => _handleDrag(d.localPosition) : null,
+        onVerticalDragStart: !drawMode
+            ? (d) => _handleDrag(d.localPosition)
+            : null,
+        onVerticalDragUpdate: !drawMode
+            ? (d) => _handleDrag(d.localPosition)
+            : null,
         onVerticalDragEnd: !drawMode ? (_) => onDragEnd() : null,
         onDoubleTapDown: (d) {
           final index = _bandIndexFromX(d.localPosition.dx);
@@ -580,8 +637,9 @@ class _GeqPainter extends CustomPainter {
 
       final tp = TextPainter(
         text: TextSpan(
-            text: '${dB > 0 ? '+' : ''}${dB.toInt()}',
-            style: labelStyle),
+          text: '${dB > 0 ? '+' : ''}${dB.toInt()}',
+          style: labelStyle,
+        ),
         textDirection: TextDirection.ltr,
       )..layout();
       tp.paint(canvas, Offset(padLeft - tp.width - 4, y - tp.height / 2));
@@ -596,23 +654,55 @@ class _GeqPainter extends CustomPainter {
       for (double f = 20; f < 100; f += 10) f,
       for (double f = 100; f < 1000; f += 100) f,
       for (double f = 1000; f < 10000; f += 1000) f,
-      10000, 20000,
+      10000,
+      20000,
     ];
 
     for (final freq in gridFreqs) {
       final x = _freqToX(freq, graphW);
       final thick =
           freq == 100 || freq == 1000 || freq == 10000 || freq == 30000;
-      canvas.drawLine(Offset(x, padTop), Offset(x, padTop + graphH),
-          thick ? thickGridPaint : gridPaint);
+      canvas.drawLine(
+        Offset(x, padTop),
+        Offset(x, padTop + graphH),
+        thick ? thickGridPaint : gridPaint,
+      );
     }
 
     // Frequency labels along bottom at key positions
     // On mobile, show more labels since we have the space
     final freqLabels = narrow
-        ? [20.0, 31.5, 50.0, 80.0, 100.0, 160.0, 250.0, 500.0, 800.0,
-           1000.0, 1600.0, 2500.0, 5000.0, 8000.0, 10000.0, 16000.0, 20000.0]
-        : [20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0];
+        ? [
+            20.0,
+            31.5,
+            50.0,
+            80.0,
+            100.0,
+            160.0,
+            250.0,
+            500.0,
+            800.0,
+            1000.0,
+            1600.0,
+            2500.0,
+            5000.0,
+            8000.0,
+            10000.0,
+            16000.0,
+            20000.0,
+          ]
+        : [
+            20.0,
+            50.0,
+            100.0,
+            200.0,
+            500.0,
+            1000.0,
+            2000.0,
+            5000.0,
+            10000.0,
+            20000.0,
+          ];
     for (final freq in freqLabels) {
       final label = _formatFreq(freq);
       final tp = TextPainter(
@@ -627,7 +717,8 @@ class _GeqPainter extends CustomPainter {
     if (rtaMagnitudes != null && rtaMagnitudes!.length == rtaBandCount) {
       final rtaBarPaint = Paint()..color = const Color(0x4F66D9EF); // cyan ~31%
       final rtaPeakPaint = Paint()
-        ..color = const Color(0x78FFFFFF) // white ~47%
+        ..color =
+            const Color(0x78FFFFFF) // white ~47%
         ..strokeWidth = 1.0;
 
       for (int b = 0; b < rtaBandCount; b++) {
@@ -685,8 +776,9 @@ class _GeqPainter extends CustomPainter {
       final halfW = (xRight - xLeft) / 2;
 
       // Bar from 0dB to value
-      final barColor =
-          dB >= 0 ? const Color(0xFFA6E22E) : const Color(0xFFF92672);
+      final barColor = dB >= 0
+          ? const Color(0xFFA6E22E)
+          : const Color(0xFFF92672);
       final barTop = dB >= 0 ? bandY : zeroY;
       final barBottom = dB >= 0 ? zeroY : bandY;
       final barRect = Rect.fromLTRB(
@@ -699,11 +791,7 @@ class _GeqPainter extends CustomPainter {
 
       // Handle circle
       final radius = halfW * 0.4;
-      canvas.drawCircle(
-        Offset(cx, bandY),
-        radius,
-        Paint()..color = barColor,
-      );
+      canvas.drawCircle(Offset(cx, bandY), radius, Paint()..color = barColor);
 
       // Frequency label inside the circle
       final freqLabel = _formatFreq(_bandFrequencies[i]);
@@ -712,7 +800,10 @@ class _GeqPainter extends CustomPainter {
           text: freqLabel,
           style: TextStyle(
             color: dB >= 0 ? const Color(0xFF272822) : const Color(0xFFF8F8F2),
-            fontSize: (radius * 0.9).clamp(freqCircleMinSize, freqCircleMaxSize),
+            fontSize: (radius * 0.9).clamp(
+              freqCircleMinSize,
+              freqCircleMaxSize,
+            ),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -741,8 +832,10 @@ class _GeqPainter extends CustomPainter {
         final dbY = dB >= 0
             ? bandY - radius - dbTp.height - 1
             : bandY + radius + 1;
-        final dbX = (cx - dbTp.width / 2)
-            .clamp(padLeft, padLeft + graphW - dbTp.width);
+        final dbX = (cx - dbTp.width / 2).clamp(
+          padLeft,
+          padLeft + graphW - dbTp.width,
+        );
         if (dbY >= padTop - 2 && dbY + dbTp.height <= padTop + graphH + 2) {
           dbTp.paint(canvas, Offset(dbX, dbY));
         }
@@ -780,19 +873,17 @@ class _GeqPainter extends CustomPainter {
       final above = bandY - bubbleH - 8;
       final bubbleY = above >= padTop ? above : bandY + 12;
       // Center horizontally, clamp within graph
-      final bubbleX = (cx - bubbleW / 2)
-          .clamp(padLeft, padLeft + graphW - bubbleW);
+      final bubbleX = (cx - bubbleW / 2).clamp(
+        padLeft,
+        padLeft + graphW - bubbleW,
+      );
 
       final bubbleRect = RRect.fromRectAndRadius(
         Rect.fromLTWH(bubbleX, bubbleY, bubbleW, bubbleH),
         const Radius.circular(4),
       );
-      canvas.drawRRect(
-          bubbleRect, Paint()..color = const Color(0xDD3E3D32));
-      tp.paint(
-        canvas,
-        Offset(bubbleX + bubblePadH, bubbleY + bubblePadV),
-      );
+      canvas.drawRRect(bubbleRect, Paint()..color = const Color(0xDD3E3D32));
+      tp.paint(canvas, Offset(bubbleX + bubblePadH, bubbleY + bubblePadV));
     }
   }
 
