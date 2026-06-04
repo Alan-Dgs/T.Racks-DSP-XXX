@@ -353,7 +353,7 @@ class ChannelConfigParser {
         debugPrint('Config: $output HPF=$hpfFreq LPF=$lpfFreq');
       }
 
-      final compressorStart = offset + 72;
+      final compressorStart = offset + 78;
       if (compressorStart + 10 <= stream.length) {
         _compressors[output] = CompressorState(
           ratioRaw: _readLe16(stream, compressorStart).clamp(0, 15),
@@ -376,7 +376,7 @@ class ChannelConfigParser {
         );
       }
 
-      final limiterStart = offset + 82;
+      final limiterStart = offset + 88;
       if (limiterStart + 8 <= stream.length) {
         _limiters[output] = LimiterState(
           attackMs: _msMinusOneRawToMs(_readLe16(stream, limiterStart), 1, 999),
@@ -393,7 +393,7 @@ class ChannelConfigParser {
         );
       }
 
-      final delayStart = offset + 94;
+      final delayStart = offset + 100;
       if (delayStart + 2 <= stream.length) {
         _delays[output] = DelayState(
           ms: proto.delayRawToMs(_readLe16(stream, delayStart)),

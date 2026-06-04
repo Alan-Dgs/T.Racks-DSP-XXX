@@ -21,6 +21,7 @@
 
 ### Fixed
 - Fixed Gate, Compressor, Limiter, and Delay tabs so they load current/preset config instead of starting from defaults.
+- Fixed DSP408 output config offsets for Compressor, Limiter, and Delay parsing.
 - Fixed app test bootstrap to pump the real provider tree.
 - Replaced the default Flutter widget test with a DSP controller smoke test.
 

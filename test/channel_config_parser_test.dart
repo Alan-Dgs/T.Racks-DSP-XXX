@@ -33,16 +33,16 @@ void main() {
       _writeLe16(stream, offsets['InA']! + 14, 100); // -40.0 dB
       _writeLe16(stream, offsets['InA']! + 136, 96); // 1.000 ms
 
-      _writeLe16(stream, offsets['Out1']! + 72, 9); // 1:4.0
-      _writeLe16(stream, offsets['Out1']! + 74, 24); // attack 25 ms
-      _writeLe16(stream, offsets['Out1']! + 76, 799); // release 800 ms
-      _writeLe16(stream, offsets['Out1']! + 78, 6); // knee 6 dB
-      _writeLe16(stream, offsets['Out1']! + 80, 140); // -20.0 dB
+      _writeLe16(stream, offsets['Out1']! + 78, 9); // 1:4.0
+      _writeLe16(stream, offsets['Out1']! + 80, 24); // attack 25 ms
+      _writeLe16(stream, offsets['Out1']! + 82, 799); // release 800 ms
+      _writeLe16(stream, offsets['Out1']! + 84, 6); // knee 6 dB
+      _writeLe16(stream, offsets['Out1']! + 86, 140); // -20.0 dB
 
-      _writeLe16(stream, offsets['Out1']! + 82, 19); // attack 20 ms
-      _writeLe16(stream, offsets['Out1']! + 84, 499); // release 500 ms
-      _writeLe16(stream, offsets['Out1']! + 88, 160); // -10.0 dB
-      _writeLe16(stream, offsets['Out1']! + 94, 960); // 10.000 ms
+      _writeLe16(stream, offsets['Out1']! + 88, 19); // attack 20 ms
+      _writeLe16(stream, offsets['Out1']! + 90, 499); // release 500 ms
+      _writeLe16(stream, offsets['Out1']! + 94, 160); // -10.0 dB
+      _writeLe16(stream, offsets['Out1']! + 100, 960); // 10.000 ms
 
       for (int i = 0; i < ChannelConfigParser.configChunkCount; i++) {
         final start = i * 50;
