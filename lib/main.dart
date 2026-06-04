@@ -13,6 +13,7 @@ import 'devices/t_racks408/providers/connection_provider.dart';
 
 // Widgets
 import 'devices/t_racks408/widgets/gain_tab.dart';
+import 'devices/t_racks408/widgets/dynamics_tabs.dart';
 import 'devices/t_racks408/widgets/geq_tab.dart';
 import 'devices/t_racks408/widgets/matrix_tab.dart';
 import 'devices/t_racks408/widgets/peq_tab.dart';
@@ -768,6 +769,18 @@ class _MyHomePageState extends State<MyHomePage> {
                     children: _tabs.map((name) {
                       if (name == 'Gain') {
                         return GainTab(deviceProvider: deviceProvider);
+                      }
+                      if (name == 'Gate') {
+                        return GateTab(deviceProvider: deviceProvider);
+                      }
+                      if (name == 'Comp') {
+                        return CompressorTab(deviceProvider: deviceProvider);
+                      }
+                      if (name == 'Limit') {
+                        return LimiterTab(deviceProvider: deviceProvider);
+                      }
+                      if (name == 'Delay') {
+                        return DelayTab(deviceProvider: deviceProvider);
                       }
                       if (name == 'Matrix') {
                         return MatrixTab(deviceProvider: deviceProvider);

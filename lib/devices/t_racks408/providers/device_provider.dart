@@ -44,6 +44,77 @@ class FilterState {
   FilterState({this.freqRaw = 0, this.slope = 0, this.enabled = false});
 }
 
+class GateState {
+  double thresholdDb;
+  int attackMs;
+  int holdMs;
+  int releaseMs;
+
+  GateState({
+    this.thresholdDb = -90.0,
+    this.attackMs = 1,
+    this.holdMs = 10,
+    this.releaseMs = 10,
+  });
+
+  GateState copy() => GateState(
+    thresholdDb: thresholdDb,
+    attackMs: attackMs,
+    holdMs: holdMs,
+    releaseMs: releaseMs,
+  );
+}
+
+class CompressorState {
+  double thresholdDb;
+  int ratioRaw;
+  int kneeDb;
+  int attackMs;
+  int releaseMs;
+
+  CompressorState({
+    this.thresholdDb = 20.0,
+    this.ratioRaw = 0,
+    this.kneeDb = 0,
+    this.attackMs = 1,
+    this.releaseMs = 10,
+  });
+
+  CompressorState copy() => CompressorState(
+    thresholdDb: thresholdDb,
+    ratioRaw: ratioRaw,
+    kneeDb: kneeDb,
+    attackMs: attackMs,
+    releaseMs: releaseMs,
+  );
+}
+
+class LimiterState {
+  double thresholdDb;
+  int attackMs;
+  int releaseMs;
+
+  LimiterState({
+    this.thresholdDb = 20.0,
+    this.attackMs = 1,
+    this.releaseMs = 10,
+  });
+
+  LimiterState copy() => LimiterState(
+    thresholdDb: thresholdDb,
+    attackMs: attackMs,
+    releaseMs: releaseMs,
+  );
+}
+
+class DelayState {
+  double ms;
+
+  DelayState({this.ms = 0.0});
+
+  DelayState copy() => DelayState(ms: ms);
+}
+
 class DeviceProvider extends ChangeNotifier {
   static const profile = DeviceProfiles.dsp408;
 
@@ -120,6 +191,24 @@ class DeviceProvider extends ChangeNotifier {
   final Map<String, FilterState> _loPass = {
     for (final ch in profile.allChannels) ch: FilterState(),
   };
+
+  final Map<String, GateState> _gates = {
+    for (final ch in profile.inputChannels) ch: GateState(),
+  };
+
+  final Map<String, CompressorState> _compressors = {
+    for (final ch in profile.outputChannels) ch: CompressorState(),
+  };
+
+  final Map<String, LimiterState> _limiters = {
+    for (final ch in profile.outputChannels) ch: LimiterState(),
+  };
+
+  final Map<String, DelayState> _delays = {
+    for (final ch in profile.allChannels) ch: DelayState(),
+  };
+
+  int _delayUnit = 0;
 
   // Channel aliases
   final Map<String, String> _channelAliases = {};
@@ -326,6 +415,19 @@ class DeviceProvider extends ChangeNotifier {
   /// Get Lo Pass filter state
   FilterState getLoPass(String channel) => _loPass[channel] ?? FilterState();
 
+  GateState getGate(String channel) => _gates[channel]?.copy() ?? GateState();
+
+  CompressorState getCompressor(String channel) =>
+      _compressors[channel]?.copy() ?? CompressorState();
+
+  LimiterState getLimiter(String channel) =>
+      _limiters[channel]?.copy() ?? LimiterState();
+
+  DelayState getDelay(String channel) =>
+      _delays[channel]?.copy() ?? DelayState();
+
+  int get delayUnit => _delayUnit;
+
   /// Set a PEQ band parameter and send to device (throttled 50ms per channel+band)
   void setPeqBand(
     String channel,
@@ -408,6 +510,112 @@ class DeviceProvider extends ChangeNotifier {
     );
     _socketService.enqueue(command);
   }
+
+  void setGate(
+    String channel, {
+    double? thresholdDb,
+    int? attackMs,
+    int? holdMs,
+    int? releaseMs,
+  }) {
+    final state = _gates[channel];
+    if (state == null) return;
+    if (thresholdDb != null) {
+      state.thresholdDb = _quantizeHalfDb(thresholdDb.clamp(-90.0, 0.0));
+    }
+    if (attackMs != null) state.attackMs = attackMs.clamp(1, 999);
+    if (holdMs != null) state.holdMs = holdMs.clamp(10, 999);
+    if (releaseMs != null) state.releaseMs = releaseMs.clamp(10, 3000);
+    notifyListeners();
+
+    if (!_socketService.isConnected) return;
+    final command = _protocolService.buildGateCommand(
+      channel,
+      thresholdDb: state.thresholdDb,
+      attackMs: state.attackMs,
+      holdMs: state.holdMs,
+      releaseMs: state.releaseMs,
+    );
+    _socketService.enqueue(command);
+  }
+
+  void setCompressor(
+    String channel, {
+    double? thresholdDb,
+    int? ratioRaw,
+    int? kneeDb,
+    int? attackMs,
+    int? releaseMs,
+  }) {
+    final state = _compressors[channel];
+    if (state == null) return;
+    if (thresholdDb != null) {
+      state.thresholdDb = _quantizeHalfDb(thresholdDb.clamp(-90.0, 20.0));
+    }
+    if (ratioRaw != null) state.ratioRaw = ratioRaw.clamp(0, 15);
+    if (kneeDb != null) state.kneeDb = kneeDb.clamp(0, 12);
+    if (attackMs != null) state.attackMs = attackMs.clamp(1, 999);
+    if (releaseMs != null) state.releaseMs = releaseMs.clamp(10, 3000);
+    notifyListeners();
+
+    if (!_socketService.isConnected) return;
+    final command = _protocolService.buildCompressorCommand(
+      channel,
+      thresholdDb: state.thresholdDb,
+      ratioRaw: state.ratioRaw,
+      kneeDb: state.kneeDb,
+      attackMs: state.attackMs,
+      releaseMs: state.releaseMs,
+    );
+    _socketService.enqueue(command);
+  }
+
+  void setLimiter(
+    String channel, {
+    double? thresholdDb,
+    int? attackMs,
+    int? releaseMs,
+  }) {
+    final state = _limiters[channel];
+    if (state == null) return;
+    if (thresholdDb != null) {
+      state.thresholdDb = _quantizeHalfDb(thresholdDb.clamp(-90.0, 20.0));
+    }
+    if (attackMs != null) state.attackMs = attackMs.clamp(1, 999);
+    if (releaseMs != null) state.releaseMs = releaseMs.clamp(10, 3000);
+    notifyListeners();
+
+    if (!_socketService.isConnected) return;
+    final command = _protocolService.buildLimiterCommand(
+      channel,
+      thresholdDb: state.thresholdDb,
+      attackMs: state.attackMs,
+      releaseMs: state.releaseMs,
+    );
+    _socketService.enqueue(command);
+  }
+
+  void setDelay(String channel, double ms) {
+    final state = _delays[channel];
+    if (state == null) return;
+    state.ms = ((ms.clamp(0.0, 680.0) * 1000).round() / 1000.0).toDouble();
+    notifyListeners();
+
+    if (!_socketService.isConnected) return;
+    final command = _protocolService.buildDelayCommand(channel, state.ms);
+    _socketService.enqueue(command);
+  }
+
+  void setDelayUnit(int unit) {
+    _delayUnit = unit.clamp(0, 2);
+    notifyListeners();
+
+    if (!_socketService.isConnected) return;
+    final command = _protocolService.buildDelayUnitCommand(_delayUnit);
+    _socketService.enqueue(command);
+  }
+
+  double _quantizeHalfDb(num dB) => (dB * 2).round() / 2.0;
 
   /// Apply PEQ bands from config dump
   void applyPeqBands(Map<String, List<PeqBand>> bands) {
@@ -676,6 +884,19 @@ class DeviceProvider extends ChangeNotifier {
     for (final ch in _loPass.keys) {
       _loPass[ch] = FilterState();
     }
+    for (final ch in _gates.keys) {
+      _gates[ch] = GateState();
+    }
+    for (final ch in _compressors.keys) {
+      _compressors[ch] = CompressorState();
+    }
+    for (final ch in _limiters.keys) {
+      _limiters[ch] = LimiterState();
+    }
+    for (final ch in _delays.keys) {
+      _delays[ch] = DelayState();
+    }
+    _delayUnit = 0;
 
     notifyListeners();
   }

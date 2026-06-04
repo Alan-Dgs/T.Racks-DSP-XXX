@@ -10,6 +10,7 @@
 - Added DSP408 captured TCP command documentation.
 - Added real DSP408 commands for phase, matrix attenuation, GEQ bypass, and channel names.
 - Added DSP408 protocol builders for Gate, Compressor, Limiter, Delay, delay unit, and Test Tone.
+- Added real DSP408 Gate, Compressor, Limiter, and Delay tabs wired to captured TCP commands.
 - Added protocol tests based on captured DSP408 frames.
 
 ### Changed
