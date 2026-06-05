@@ -755,6 +755,8 @@ class _GeqPainter extends CustomPainter {
       }
     }
 
+    _drawContinuousEqCurve(canvas, graphW, graphH);
+
     // Band bars + handles — positioned by log frequency
     final zeroY = padTop + graphH * 0.5; // 0 dB line
 
@@ -885,6 +887,78 @@ class _GeqPainter extends CustomPainter {
       canvas.drawRRect(bubbleRect, Paint()..color = const Color(0xDD3E3D32));
       tp.paint(canvas, Offset(bubbleX + bubblePadH, bubbleY + bubblePadV));
     }
+  }
+
+  void _drawContinuousEqCurve(Canvas canvas, double graphW, double graphH) {
+    if (bands.length != 31) return;
+
+    final zeroY = padTop + graphH * 0.5;
+    final curvePath = Path();
+    final fillPath = Path();
+    const steps = 420;
+
+    for (int s = 0; s <= steps; s++) {
+      final norm = s / steps;
+      final freq = _normToFreq(norm);
+      final dB = _interpolatedGeqDb(freq);
+      final x = padLeft + norm * graphW;
+      final y = padTop + graphH * (1.0 - (dB + 12) / 24);
+
+      if (s == 0) {
+        curvePath.moveTo(x, y);
+        fillPath.moveTo(x, zeroY);
+        fillPath.lineTo(x, y);
+      } else {
+        curvePath.lineTo(x, y);
+        fillPath.lineTo(x, y);
+      }
+    }
+
+    fillPath.lineTo(padLeft + graphW, zeroY);
+    fillPath.close();
+
+    final averageAbs =
+        bands.fold<double>(0.0, (sum, value) => sum + value.abs()) /
+        bands.length;
+    final activeColor = averageAbs < 0.01
+        ? const Color(0xFF75715E)
+        : const Color(0xFFA6E22E);
+
+    canvas.drawPath(
+      fillPath,
+      Paint()
+        ..color = activeColor.withAlpha(32)
+        ..style = PaintingStyle.fill,
+    );
+
+    canvas.drawPath(
+      curvePath,
+      Paint()
+        ..color = activeColor.withAlpha(230)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  double _interpolatedGeqDb(double freq) {
+    final logFreq = math.log(
+      freq.clamp(_bandFrequencies.first, _bandFrequencies.last),
+    );
+    if (logFreq <= math.log(_bandFrequencies.first)) return bands.first;
+    if (logFreq >= math.log(_bandFrequencies.last)) return bands.last;
+
+    for (int i = 0; i < _bandFrequencies.length - 1; i++) {
+      final leftLog = math.log(_bandFrequencies[i]);
+      final rightLog = math.log(_bandFrequencies[i + 1]);
+      if (logFreq >= leftLog && logFreq <= rightLog) {
+        final t = (logFreq - leftLog) / (rightLog - leftLog);
+        final eased = t * t * (3.0 - 2.0 * t);
+        return bands[i] + (bands[i + 1] - bands[i]) * eased;
+      }
+    }
+    return 0.0;
   }
 
   @override

@@ -17,12 +17,14 @@
 - Added a bottom Test Tone panel wired to the captured DSP408 test tone command.
 - Added a bottom Parsed Config panel for comparing decoded app state with the official editor.
 - Added an Offline Workspace panel with local editing, JSON copy/paste snapshots, and a manual push-to-DSP action.
+- Added a continuous GEQ response envelope for easier EQ shape reading.
 
 ### Changed
 - Rewrote the README to document current DSP408 status, experimental areas, and safety precautions.
 - Refactored selected widgets/providers to use the DSP408 device profile.
 - Updated HPF command handling from captured protocol behavior: last byte is slope/type.
 - Changed implemented controls to update local DSP408 state even when disconnected.
+- Improved PEQ graph response calculation with biquad-based peak and shelf curves.
 - Moved protocol and capture documentation under `docs/`.
 
 ### Fixed

@@ -1344,43 +1344,139 @@ class _PeqPainter extends CustomPainter {
     double gainDb,
     int type,
   ) {
-    if (gainDb.abs() < 0.01 && type == 0) return 0.0;
-    if (q < 0.01) return 0.0;
-
-    final ratio = freq / centerFreq;
-    final logRatio = math.log(ratio);
+    if (centerFreq <= 0 || q <= 0) return 0.0;
 
     switch (type) {
       case 0: // Peak
-        final bw = 1.0 / q;
-        final x = logRatio / (bw * 0.5 * math.ln2);
-        return gainDb / (1.0 + x * x);
+        if (gainDb.abs() < 0.01) return 0.0;
+        return _rbjPeakDb(freq, centerFreq, q, gainDb);
       case 1: // Low Shelf
-        final x = logRatio / (math.ln2 * 0.5);
-        final t = 1.0 / (1.0 + math.exp(x * 3));
-        return gainDb * t;
+        if (gainDb.abs() < 0.01) return 0.0;
+        return _rbjShelfDb(freq, centerFreq, q, gainDb, true);
       case 2: // High Shelf
-        final x = logRatio / (math.ln2 * 0.5);
-        final t = 1.0 / (1.0 + math.exp(-x * 3));
-        return gainDb * t;
+        if (gainDb.abs() < 0.01) return 0.0;
+        return _rbjShelfDb(freq, centerFreq, q, gainDb, false);
       case 3: // LP -6dB
-        if (freq <= centerFreq) return 0;
-        return -6.0 * math.log(ratio) / math.ln2;
+        return _analogLowPassDb(freq, centerFreq, 1);
       case 4: // LP -12dB
-        if (freq <= centerFreq) return 0;
-        return -12.0 * math.log(ratio) / math.ln2;
+        return _analogLowPassDb(freq, centerFreq, 2);
       case 5: // HP -6dB
-        if (freq >= centerFreq) return 0;
-        return 6.0 * math.log(ratio) / math.ln2;
+        return _analogHighPassDb(freq, centerFreq, 1);
       case 6: // HP -12dB
-        if (freq >= centerFreq) return 0;
-        return 12.0 * math.log(ratio) / math.ln2;
+        return _analogHighPassDb(freq, centerFreq, 2);
       case 7: // All Pass 1
       case 8: // All Pass 2
         return 0;
       default:
         return 0;
     }
+  }
+
+  double _rbjPeakDb(double freq, double centerFreq, double q, double gainDb) {
+    final a = math.pow(10.0, gainDb / 40.0).toDouble();
+    final w0 = _omega(freq);
+    final wc = _omega(centerFreq);
+    final alpha = math.sin(wc) / (2.0 * q);
+
+    final b0 = 1.0 + alpha * a;
+    final b1 = -2.0 * math.cos(wc);
+    final b2 = 1.0 - alpha * a;
+    final a0 = 1.0 + alpha / a;
+    final a1 = -2.0 * math.cos(wc);
+    final a2 = 1.0 - alpha / a;
+
+    return _biquadDb(w0, b0, b1, b2, a0, a1, a2);
+  }
+
+  double _rbjShelfDb(
+    double freq,
+    double centerFreq,
+    double q,
+    double gainDb,
+    bool lowShelf,
+  ) {
+    final a = math.pow(10.0, gainDb / 40.0).toDouble();
+    final w0 = _omega(freq);
+    final wc = _omega(centerFreq);
+    final cosWc = math.cos(wc);
+    final sinWc = math.sin(wc);
+    final shelfSlope = q.clamp(0.1, 4.0).toDouble();
+    final alpha = sinWc / 2.0 * math.sqrt((a + 1 / a) / shelfSlope - 2);
+    final beta = 2.0 * math.sqrt(a) * alpha;
+
+    late final double b0;
+    late final double b1;
+    late final double b2;
+    late final double a0;
+    late final double a1;
+    late final double a2;
+
+    if (lowShelf) {
+      b0 = a * ((a + 1) - (a - 1) * cosWc + beta);
+      b1 = 2 * a * ((a - 1) - (a + 1) * cosWc);
+      b2 = a * ((a + 1) - (a - 1) * cosWc - beta);
+      a0 = (a + 1) + (a - 1) * cosWc + beta;
+      a1 = -2 * ((a - 1) + (a + 1) * cosWc);
+      a2 = (a + 1) + (a - 1) * cosWc - beta;
+    } else {
+      b0 = a * ((a + 1) + (a - 1) * cosWc + beta);
+      b1 = -2 * a * ((a - 1) + (a + 1) * cosWc);
+      b2 = a * ((a + 1) + (a - 1) * cosWc - beta);
+      a0 = (a + 1) - (a - 1) * cosWc + beta;
+      a1 = 2 * ((a - 1) - (a + 1) * cosWc);
+      a2 = (a + 1) - (a - 1) * cosWc - beta;
+    }
+
+    return _biquadDb(w0, b0, b1, b2, a0, a1, a2);
+  }
+
+  double _analogLowPassDb(double freq, double cutoffHz, int order) {
+    final ratio = freq / cutoffHz;
+    final power = math.pow(ratio, 2 * order).toDouble();
+    final linear = 1.0 / math.sqrt(1.0 + power);
+    return _linearToDb(linear);
+  }
+
+  double _analogHighPassDb(double freq, double cutoffHz, int order) {
+    final ratio = cutoffHz / freq;
+    final power = math.pow(ratio, 2 * order).toDouble();
+    final linear = 1.0 / math.sqrt(1.0 + power);
+    return _linearToDb(linear);
+  }
+
+  double _omega(double freq) {
+    const sampleRate = 48000.0;
+    final clamped = freq.clamp(1.0, sampleRate / 2 - 1.0).toDouble();
+    return 2.0 * math.pi * clamped / sampleRate;
+  }
+
+  double _biquadDb(
+    double w,
+    double b0,
+    double b1,
+    double b2,
+    double a0,
+    double a1,
+    double a2,
+  ) {
+    final cosW = math.cos(w);
+    final sinW = math.sin(w);
+    final cos2W = math.cos(2.0 * w);
+    final sin2W = math.sin(2.0 * w);
+
+    final numRe = b0 + b1 * cosW + b2 * cos2W;
+    final numIm = -(b1 * sinW + b2 * sin2W);
+    final denRe = a0 + a1 * cosW + a2 * cos2W;
+    final denIm = -(a1 * sinW + a2 * sin2W);
+    final numMag = math.sqrt(numRe * numRe + numIm * numIm);
+    final denMag = math.sqrt(denRe * denRe + denIm * denIm);
+    if (denMag <= 0) return 0.0;
+    return _linearToDb(numMag / denMag);
+  }
+
+  double _linearToDb(double linear) {
+    if (linear <= 0) return -120.0;
+    return 20.0 * math.log(linear) / math.ln10;
   }
 
   @override
