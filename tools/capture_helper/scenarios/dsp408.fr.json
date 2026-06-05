@@ -1,0 +1,165 @@
+{
+  "device_model": "DSP408",
+  "language": "fr",
+  "scenarios": [
+    {
+      "order": 1,
+      "key": "phase",
+      "title": "Phase entree/sortie",
+      "file_stem": "001_phase_input_output",
+      "steps": [
+        "Dans l'editeur officiel, ouvre l'onglet Gain.",
+        "Passe InA de Normal a Inverse, puis clique Action faite.",
+        "Repasse InA de Inverse a Normal, puis clique Action faite.",
+        "Passe Out1 de Normal a Inverse, puis clique Action faite.",
+        "Repasse Out1 de Inverse a Normal, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 2,
+      "key": "matrix_attenuation",
+      "title": "Attenuation matrix",
+      "file_stem": "002_matrix_attenuation_out1_ina",
+      "steps": [
+        "Ouvre l'onglet Matrix.",
+        "Sur Out1/InA, regle le gain a +0.0 dB, puis clique Action faite.",
+        "Sur Out1/InA, regle le gain a -6.0 dB, puis clique Action faite.",
+        "Sur Out1/InA, regle le gain a -20.0 dB, puis clique Action faite.",
+        "Sur Out1/InA, regle le gain a -60.0 dB, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 3,
+      "key": "gate",
+      "title": "Gate InA",
+      "file_stem": "003_gate_ina_threshold_attack_hold_release",
+      "steps": [
+        "Ouvre l'onglet Gate.",
+        "Sur InA, mets Threshold a -40.0 dB, puis clique Action faite.",
+        "Sur InA, mets Attack a 10 ms, puis clique Action faite.",
+        "Sur InA, mets Hold a 250 ms, puis clique Action faite.",
+        "Sur InA, mets Release a 750 ms, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 4,
+      "key": "comp",
+      "title": "Compressor Out1",
+      "file_stem": "004_comp_out1_threshold_ratio_knee_attack_release",
+      "steps": [
+        "Ouvre l'onglet Comp.",
+        "Sur Out1, mets Threshold a -20.0 dB, puis clique Action faite.",
+        "Sur Out1, mets Ratio a 1:4.0, puis clique Action faite.",
+        "Sur Out1, mets Knee a 6 dB, puis clique Action faite.",
+        "Sur Out1, mets Attack a 25 ms, puis clique Action faite.",
+        "Sur Out1, mets Release a 800 ms, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 5,
+      "key": "limit",
+      "title": "Limiter Out1",
+      "file_stem": "005_limit_out1_threshold_attack_release",
+      "steps": [
+        "Ouvre l'onglet Limit.",
+        "Sur Out1, mets Threshold a -10.0 dB, puis clique Action faite.",
+        "Sur Out1, mets Attack a 20 ms, puis clique Action faite.",
+        "Sur Out1, mets Release a 500 ms, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 6,
+      "key": "delay",
+      "title": "Delay entrees/sorties",
+      "file_stem": "006_delay_ina_out1_ms_m_ft",
+      "steps": [
+        "Ouvre l'onglet Delay.",
+        "En unite ms, mets InA a 1.000 ms, puis clique Action faite.",
+        "En unite ms, mets Out1 a 10.000 ms, puis clique Action faite.",
+        "Passe l'unite en m, puis clique Action faite.",
+        "Passe l'unite en ft, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 7,
+      "key": "peq_hpf_lpf",
+      "title": "PEQ + HPF/LPF",
+      "file_stem": "007_peq_hpf_lpf_ina_out1",
+      "steps": [
+        "Ouvre l'onglet InA.",
+        "Band 1: mets Gain a +3.0 dB, puis clique Action faite.",
+        "Band 1: change Type en Low Shelf, puis clique Action faite.",
+        "Band 1: active Bypass, puis clique Action faite.",
+        "HighPass: mets 315.0 Hz et slope BW -24, puis clique Action faite.",
+        "LowPass: mets 20.16 kHz et slope LK/LR -48, puis clique Action faite.",
+        "Ouvre l'onglet Out1.",
+        "Band 9: mets Gain a -3.0 dB, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 8,
+      "key": "geq_bypass_reset",
+      "title": "GEQ bypass/reset",
+      "file_stem": "008_geq_bypass_reset_ina",
+      "steps": [
+        "Ouvre l'onglet GEQ.",
+        "Sur InA, mets 1 kHz a +3.0 dB, puis clique Action faite.",
+        "Clique EQ Bypass, puis clique Action faite.",
+        "Clique EQ Reset, confirme OK, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 9,
+      "key": "test_tone",
+      "title": "Test Tone",
+      "file_stem": "009_test_tone_sources_sine",
+      "steps": [
+        "Ouvre Test Tone.",
+        "Selectionne Analog Input, puis clique Action faite.",
+        "Selectionne Pink Noise, puis clique Action faite.",
+        "Selectionne White Noise, puis clique Action faite.",
+        "Selectionne Sine Wave 20 Hz, puis clique Action faite.",
+        "Selectionne Sine Wave 1 kHz, puis clique Action faite.",
+        "Selectionne Sine Wave 20 kHz, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 10,
+      "key": "channel_name",
+      "title": "Channel Name",
+      "file_stem": "010_channel_name_8chars",
+      "steps": [
+        "Ouvre Channel Name.",
+        "Renomme InA en 12345678, puis clique Set et Action faite.",
+        "Renomme Out1 en 12345678, puis clique Set et Action faite.",
+        "Remets InA et Out1 a leur nom initial, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 11,
+      "key": "link_copy",
+      "title": "Link and Copy",
+      "file_stem": "011_link_copy_in_out",
+      "steps": [
+        "Ouvre Link.",
+        "Lie InA avec InB, clique Set, puis clique Action faite.",
+        "Change un parametre simple sur InA pour verifier copie vers InB, puis clique Action faite.",
+        "Ouvre Copy.",
+        "Copie InA vers InB, puis clique Action faite.",
+        "Copie Out1 vers Out2, puis clique Action faite."
+      ]
+    },
+    {
+      "order": 12,
+      "key": "file_setting_lock",
+      "title": "File / Setting ID-IP / Lock",
+      "file_stem": "012_file_setting_lock_low_priority",
+      "steps": [
+        "Ouvre File et clique Open sans choisir de fichier, puis clique Action faite.",
+        "Ouvre File et note les options visibles, puis clique Action faite.",
+        "Ouvre Setting ID/IP sans modifier, puis clique Action faite.",
+        "Ouvre Lock sans valider de changement, puis clique Action faite."
+      ]
+    }
+  ]
+}

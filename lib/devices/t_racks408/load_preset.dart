@@ -31,6 +31,10 @@ class ChannelConfigParser {
   final Map<String, List<PeqBand>> _peqBands = {};
   final Map<String, FilterState> _hiPass = {};
   final Map<String, FilterState> _loPass = {};
+  final Map<String, GateState> _gates = {};
+  final Map<String, CompressorState> _compressors = {};
+  final Map<String, LimiterState> _limiters = {};
+  final Map<String, DelayState> _delays = {};
   String _currentPreset = 'Unknown';
 
   Map<String, double> get channelGains => Map.unmodifiable(_channelGains);
@@ -39,6 +43,11 @@ class ChannelConfigParser {
   Map<String, List<PeqBand>> get peqBands => Map.unmodifiable(_peqBands);
   Map<String, FilterState> get hiPass => Map.unmodifiable(_hiPass);
   Map<String, FilterState> get loPass => Map.unmodifiable(_loPass);
+  Map<String, GateState> get gates => Map.unmodifiable(_gates);
+  Map<String, CompressorState> get compressors =>
+      Map.unmodifiable(_compressors);
+  Map<String, LimiterState> get limiters => Map.unmodifiable(_limiters);
+  Map<String, DelayState> get delays => Map.unmodifiable(_delays);
   // ignore: unnecessary_getters_setters
   String get currentPreset => _currentPreset;
   // ignore: unnecessary_getters_setters
@@ -52,6 +61,10 @@ class ChannelConfigParser {
     _peqBands.clear();
     _hiPass.clear();
     _loPass.clear();
+    _gates.clear();
+    _compressors.clear();
+    _limiters.clear();
+    _delays.clear();
     _currentPreset = 'Unknown';
   }
 
@@ -115,10 +128,10 @@ class ChannelConfigParser {
 
     // Channel names to search for and their labels
     final channelPatterns = <String, List<int>>{
-      'In A': [0x49, 0x6e, 0x41],  // "InA"
-      'In B': [0x49, 0x6e, 0x42],  // "InB"
-      'In C': [0x49, 0x6e, 0x43],  // "InC"
-      'In D': [0x49, 0x6e, 0x44],  // "InD"
+      'In A': [0x49, 0x6e, 0x41], // "InA"
+      'In B': [0x49, 0x6e, 0x42], // "InB"
+      'In C': [0x49, 0x6e, 0x43], // "InC"
+      'In D': [0x49, 0x6e, 0x44], // "InD"
       'Out 1': [0x4f, 0x75, 0x74, 0x31], // "Out1"
       'Out 2': [0x4f, 0x75, 0x74, 0x32], // "Out2"
       'Out 3': [0x4f, 0x75, 0x74, 0x33], // "Out3"
@@ -152,9 +165,18 @@ class ChannelConfigParser {
     // NEXT channel's name position. The channel order in the stream is:
     // InA, InB, InC, InD, Out1, Out2, ..., Out8
     final channelOrder = [
-      'In A', 'In B', 'In C', 'In D',
-      'Out 1', 'Out 2', 'Out 3', 'Out 4',
-      'Out 5', 'Out 6', 'Out 7', 'Out 8',
+      'In A',
+      'In B',
+      'In C',
+      'In D',
+      'Out 1',
+      'Out 2',
+      'Out 3',
+      'Out 4',
+      'Out 5',
+      'Out 6',
+      'Out 7',
+      'Out 8',
     ];
 
     for (int i = 0; i < channelOrder.length; i++) {
@@ -181,21 +203,33 @@ class ChannelConfigParser {
         final rawValue = stream[gainOffset] | (stream[gainOffset + 1] << 8);
         final dB = (rawValue - 280) / 10.0;
         _channelGains[channel] = dB;
-        debugPrint('Config: $channel gain = ${dB.toStringAsFixed(1)} dB (raw: $rawValue)');
+        debugPrint(
+          'Config: $channel gain = ${dB.toStringAsFixed(1)} dB (raw: $rawValue)',
+        );
       }
     }
 
     // Extract matrix routing bitmasks for each output channel.
     // Pattern: "OutN" (4 bytes) + 4 null bytes + bitmask byte
     // Bitmask: 0x01=In A, 0x02=In B, 0x04=In C, 0x08=In D
-    for (final output in ['Out 1', 'Out 2', 'Out 3', 'Out 4',
-                           'Out 5', 'Out 6', 'Out 7', 'Out 8']) {
+    for (final output in [
+      'Out 1',
+      'Out 2',
+      'Out 3',
+      'Out 4',
+      'Out 5',
+      'Out 6',
+      'Out 7',
+      'Out 8',
+    ]) {
       final offset = channelOffsets[output];
       if (offset == null) continue;
       final bitmaskOffset = offset + 8; // 4 name + 4 nulls
       if (bitmaskOffset < stream.length) {
         _matrixRouting[output] = stream[bitmaskOffset];
-        debugPrint('Config: $output matrix = 0x${stream[bitmaskOffset].toRadixString(16).padLeft(2, '0')}');
+        debugPrint(
+          'Config: $output matrix = 0x${stream[bitmaskOffset].toRadixString(16).padLeft(2, '0')}',
+        );
       }
     }
 
@@ -207,7 +241,8 @@ class ChannelConfigParser {
       final offset = channelOffsets[input];
       if (offset == null) continue;
 
-      final geqStart = offset + 16; // GEQ data starts 16 bytes after channel name
+      final geqStart =
+          offset + 16; // GEQ data starts 16 bytes after channel name
       final geqEnd = geqStart + 31 * 2; // 31 bands x 2 bytes each
       if (geqEnd > stream.length) continue;
 
@@ -218,7 +253,9 @@ class ChannelConfigParser {
         bands.add(proto.geqValueToDb(rawValue));
       }
       _geqBands[input] = bands;
-      debugPrint('Config: $input GEQ loaded (${bands.where((v) => v != 0.0).length} non-zero bands)');
+      debugPrint(
+        'Config: $input GEQ loaded (${bands.where((v) => v != 0.0).length} non-zero bands)',
+      );
     }
 
     // Extract PEQ bands for input channels.
@@ -238,28 +275,61 @@ class ChannelConfigParser {
         bands.add(_parsePeqBand(stream, pos));
       }
       _peqBands[input] = bands;
-      debugPrint('Config: $input PEQ loaded (${bands.where((b) => b.gainDb != 0.0).length} non-zero bands)');
+      debugPrint(
+        'Config: $input PEQ loaded (${bands.where((b) => b.gainDb != 0.0).length} non-zero bands)',
+      );
 
       // Input filter data: 6 bytes after PEQ bands
       // [HPF freq LE16] [LPF freq LE16] [00] [00]
       final filterStart = peqEnd;
       if (filterStart + 4 <= stream.length) {
         final hpfFreq = stream[filterStart] | (stream[filterStart + 1] << 8);
-        final lpfFreq = stream[filterStart + 2] | (stream[filterStart + 3] << 8);
+        final lpfFreq =
+            stream[filterStart + 2] | (stream[filterStart + 3] << 8);
         _hiPass[input] = FilterState(freqRaw: hpfFreq, enabled: hpfFreq > 0);
         _loPass[input] = FilterState(freqRaw: lpfFreq);
         debugPrint('Config: $input HPF=$hpfFreq LPF=$lpfFreq');
       }
+
+      final gateStart = offset + 8;
+      if (gateStart + 8 <= stream.length) {
+        final attackRaw = _readLe16(stream, gateStart);
+        final releaseRaw = _readLe16(stream, gateStart + 2);
+        final holdRaw = _readLe16(stream, gateStart + 4);
+        final thresholdRaw = _readLe16(stream, gateStart + 6);
+        _gates[input] = GateState(
+          thresholdDb: _thresholdRawToDb(thresholdRaw, -90.0, 0.0),
+          attackMs: _msMinusOneRawToMs(attackRaw, 1, 999),
+          holdMs: _msMinusOneRawToMs(holdRaw, 10, 999),
+          releaseMs: _msMinusOneRawToMs(releaseRaw, 10, 3000),
+        );
+      }
+
+      final delayStart = offset + 136;
+      if (delayStart + 2 <= stream.length) {
+        _delays[input] = DelayState(
+          ms: proto.delayRawToMs(_readLe16(stream, delayStart)),
+        );
+      }
     }
 
     // Extract PEQ bands for output channels.
-    // Each output has 9 PEQ bands × 6 bytes at channelOffset + 18 (after 18-byte header).
-    for (final output in ['Out 1', 'Out 2', 'Out 3', 'Out 4',
-                           'Out 5', 'Out 6', 'Out 7', 'Out 8']) {
+    // Each output has 9 PEQ bands x 6 bytes at channelOffset + 24.
+    // The first 24 bytes contain output header/routing/gain fields.
+    for (final output in [
+      'Out 1',
+      'Out 2',
+      'Out 3',
+      'Out 4',
+      'Out 5',
+      'Out 6',
+      'Out 7',
+      'Out 8',
+    ]) {
       final offset = channelOffsets[output];
       if (offset == null) continue;
 
-      final peqStart = offset + 18; // 18-byte header
+      final peqStart = offset + 24;
       final peqEnd = peqStart + 9 * 6;
       if (peqEnd > stream.length) continue;
 
@@ -269,20 +339,71 @@ class ChannelConfigParser {
         bands.add(_parsePeqBand(stream, pos));
       }
       _peqBands[output] = bands;
-      debugPrint('Config: $output PEQ loaded (${bands.where((b) => b.gainDb != 0.0).length} non-zero bands)');
+      debugPrint(
+        'Config: $output PEQ loaded (${bands.where((b) => b.gainDb != 0.0).length} non-zero bands)',
+      );
 
-      // Output filter data: after PEQ bands at peqEnd
-      // Bytes 0-1: HPF freq LE16, bytes 2-3: unknown, bytes 4-7: unknown,
-      // bytes 8-9: LPF freq LE16 (from pattern analysis)
-      if (peqEnd + 10 <= stream.length) {
-        final hpfFreq = stream[peqEnd] | (stream[peqEnd + 1] << 8);
-        final lpfFreq = stream[peqEnd + 8] | (stream[peqEnd + 9] << 8);
-        _hiPass[output] = FilterState(freqRaw: hpfFreq, enabled: hpfFreq > 0);
-        _loPass[output] = FilterState(freqRaw: lpfFreq);
-        debugPrint('Config: $output HPF=$hpfFreq LPF=$lpfFreq');
+      // Output HPF/LPF fields are not yet mapped safely from the config dump.
+      // Commands are implemented, but applying guessed offsets here would make
+      // the UI lie after connection/preset load.
+
+      final compressorStart = offset + 78;
+      if (compressorStart + 10 <= stream.length) {
+        _compressors[output] = CompressorState(
+          ratioRaw: _readLe16(stream, compressorStart).clamp(0, 15),
+          attackMs: _msMinusOneRawToMs(
+            _readLe16(stream, compressorStart + 2),
+            1,
+            999,
+          ),
+          releaseMs: _msMinusOneRawToMs(
+            _readLe16(stream, compressorStart + 4),
+            10,
+            3000,
+          ),
+          kneeDb: _readLe16(stream, compressorStart + 6).clamp(0, 12),
+          thresholdDb: _thresholdRawToDb(
+            _readLe16(stream, compressorStart + 8),
+            -90.0,
+            20.0,
+          ),
+        );
+      }
+
+      final limiterStart = offset + 88;
+      if (limiterStart + 8 <= stream.length) {
+        _limiters[output] = LimiterState(
+          attackMs: _msMinusOneRawToMs(_readLe16(stream, limiterStart), 1, 999),
+          releaseMs: _msMinusOneRawToMs(
+            _readLe16(stream, limiterStart + 2),
+            10,
+            3000,
+          ),
+          thresholdDb: _thresholdRawToDb(
+            _readLe16(stream, limiterStart + 6),
+            -90.0,
+            20.0,
+          ),
+        );
+      }
+
+      final delayStart = offset + 100;
+      if (delayStart + 2 <= stream.length) {
+        _delays[output] = DelayState(
+          ms: proto.delayRawToMs(_readLe16(stream, delayStart)),
+        );
       }
     }
   }
+
+  static int _readLe16(List<int> stream, int pos) =>
+      stream[pos] | (stream[pos + 1] << 8);
+
+  static double _thresholdRawToDb(int raw, double minDb, double maxDb) =>
+      (raw / 2.0 - 90.0).clamp(minDb, maxDb);
+
+  static int _msMinusOneRawToMs(int raw, int minMs, int maxMs) =>
+      (raw + 1).clamp(minMs, maxMs);
 
   /// Parse a single PEQ band from 6 bytes in the stream.
   static PeqBand _parsePeqBand(List<int> stream, int pos) {
@@ -358,7 +479,10 @@ class ChannelConfigParser {
   /// 1. Store preset name command (cmd 0x26)
   /// 2. Store to slot command (cmd 0x21)
   /// 3. Status query (cmd 0x12)
-  static List<List<int>> buildStorePresetSequence(int presetIndex, String name) {
+  static List<List<int>> buildStorePresetSequence(
+    int presetIndex,
+    String name,
+  ) {
     return [
       buildStorePresetNameCommand(name),
       buildStorePresetSlotCommand(presetIndex),

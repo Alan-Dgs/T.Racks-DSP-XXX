@@ -5,6 +5,8 @@
 
 import 'dart:math' as math;
 
+import '../device_profile.dart';
+
 /// Types of protocol messages
 enum MessageType {
   handshake,
@@ -33,7 +35,7 @@ class PresetMessage extends ProtocolMessage {
   final String name;
 
   PresetMessage(this.index, this.name, List<int> rawData)
-      : super(MessageType.preset, rawData);
+    : super(MessageType.preset, rawData);
 }
 
 /// Current preset message
@@ -41,7 +43,7 @@ class CurrentPresetMessage extends ProtocolMessage {
   final String name;
 
   CurrentPresetMessage(this.name, List<int> rawData)
-      : super(MessageType.currentPreset, rawData);
+    : super(MessageType.currentPreset, rawData);
 }
 
 /// Channel config chunk message (cmd 0x24)
@@ -50,7 +52,7 @@ class ChannelConfigMessage extends ProtocolMessage {
   final List<int> chunkData;
 
   ChannelConfigMessage(this.subIndex, this.chunkData, List<int> rawData)
-      : super(MessageType.channelConfig, rawData);
+    : super(MessageType.channelConfig, rawData);
 }
 
 /// Device info message
@@ -58,7 +60,7 @@ class DeviceInfoMessage extends ProtocolMessage {
   final String deviceName;
 
   DeviceInfoMessage(this.deviceName, List<int> rawData)
-      : super(MessageType.deviceInfo, rawData);
+    : super(MessageType.deviceInfo, rawData);
 }
 
 /// Preset count message
@@ -66,17 +68,16 @@ class PresetCountMessage extends ProtocolMessage {
   final int count;
 
   PresetCountMessage(this.count, List<int> rawData)
-      : super(MessageType.presetCount, rawData);
+    : super(MessageType.presetCount, rawData);
 }
 
-/// Keepalive/meter message (cmd 0x40 response with 12 channel levels)
+/// Keepalive/meter message (cmd 0x40 response with profile channel levels)
 class KeepaliveMessage extends ProtocolMessage {
-  /// Meter levels for all 12 channels as linear float values
-  /// Order: In A, In B, In C, In D, Out 1-8
+  /// Meter levels for all profile channels as linear float values.
   final List<double> meterLevels;
 
   KeepaliveMessage(this.meterLevels, List<int> rawData)
-      : super(MessageType.keepalive, rawData);
+    : super(MessageType.keepalive, rawData);
 }
 
 /// Unknown message
@@ -113,15 +114,17 @@ class ProtocolService {
     }
   }
 
-  /// Parse 12 channel meter levels from keepalive response data
+  /// Parse channel meter levels from keepalive response data
   /// Each channel is 3 bytes: [float16_low, float16_high, peak_byte]
   static List<double> parseMeterLevels(List<int> data) {
+    final meterCount = DeviceProfiles.dsp408.allChannels.length;
     final levels = <double>[];
     // Data starts at byte 6 (after 10 02 01 00 27 40)
-    // 12 channels * 3 bytes = 36 bytes of meter data
-    if (data.length < 42) return List.filled(12, 0.0); // too short
+    if (data.length < 6 + meterCount * 3) {
+      return List.filled(meterCount, 0.0);
+    }
 
-    for (int ch = 0; ch < 12; ch++) {
+    for (int ch = 0; ch < meterCount; ch++) {
       final offset = 6 + ch * 3;
       final linear = decodeFloat16(data[offset], data[offset + 1]);
       // DSP returns 0xFF 0xFF (NaN) for channels during PEQ recalculation
@@ -173,14 +176,7 @@ class ProtocolService {
     final valueLow = value & 0xFF;
     final valueHigh = (value >> 8) & 0xFF;
 
-    // Map label to channel index
-    final channelMap = {
-      'In A': 0x00, 'In B': 0x01, 'In C': 0x02, 'In D': 0x03,
-      'Out 1': 0x04, 'Out 2': 0x05, 'Out 3': 0x06, 'Out 4': 0x07,
-      'Out 5': 0x08, 'Out 6': 0x09, 'Out 7': 0x0A, 'Out 8': 0x0B,
-    };
-
-    final channel = channelMap[channelLabel];
+    final channel = DeviceProfiles.dsp408.channelIndex(channelLabel);
     if (channel == null) {
       throw ArgumentError('Invalid channel label: $channelLabel');
     }
@@ -194,53 +190,29 @@ class ProtocolService {
 
   /// Build mute command
   List<int> buildMuteCommand(String channelLabel, bool mute) {
-    final muteCommands = {
-      // Input channels
-      'In A': mute
-          ? [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x00, 0x01, 0x10, 0x03, 0x37]
-          : [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x00, 0x00, 0x10, 0x03, 0x36],
-      'In B': mute
-          ? [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x01, 0x01, 0x10, 0x03, 0x36]
-          : [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x01, 0x00, 0x10, 0x03, 0x37],
-      'In C': mute
-          ? [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x02, 0x01, 0x10, 0x03, 0x35]
-          : [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x02, 0x00, 0x10, 0x03, 0x34],
-      'In D': mute
-          ? [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x03, 0x01, 0x10, 0x03, 0x34]
-          : [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x03, 0x00, 0x10, 0x03, 0x35],
-      // Output channels
-      'Out 1': mute
-          ? [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x04, 0x01, 0x10, 0x03, 0x33]
-          : [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x04, 0x00, 0x10, 0x03, 0x32],
-      'Out 2': mute
-          ? [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x05, 0x01, 0x10, 0x03, 0x32]
-          : [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x05, 0x00, 0x10, 0x03, 0x33],
-      'Out 3': mute
-          ? [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x06, 0x01, 0x10, 0x03, 0x31]
-          : [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x06, 0x00, 0x10, 0x03, 0x30],
-      'Out 4': mute
-          ? [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x07, 0x01, 0x10, 0x03, 0x30]
-          : [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x07, 0x00, 0x10, 0x03, 0x31],
-      'Out 5': mute
-          ? [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x08, 0x01, 0x10, 0x03, 0x3F]
-          : [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x08, 0x00, 0x10, 0x03, 0x3E],
-      'Out 6': mute
-          ? [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x09, 0x01, 0x10, 0x03, 0x3E]
-          : [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x09, 0x00, 0x10, 0x03, 0x3F],
-      'Out 7': mute
-          ? [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x0A, 0x01, 0x10, 0x03, 0x3D]
-          : [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x0A, 0x00, 0x10, 0x03, 0x3C],
-      'Out 8': mute
-          ? [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x0B, 0x01, 0x10, 0x03, 0x3C]
-          : [0x10, 0x02, 0x00, 0x01, 0x03, 0x35, 0x0B, 0x00, 0x10, 0x03, 0x3D],
-    };
-
-    final command = muteCommands[channelLabel];
-    if (command == null) {
+    final channel = DeviceProfiles.dsp408.channelIndex(channelLabel);
+    if (channel == null) {
       throw ArgumentError('Invalid channel label: $channelLabel');
     }
 
-    return command;
+    final dataBytes = [0x00, 0x01, 0x03, 0x35, channel, mute ? 0x01 : 0x00];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Build phase command (cmd 0x36)
+  ///
+  /// Protocol: `10 02 00 01 03 36 [channel] [phase] 10 03 [checksum]`
+  /// Phase: 0x00 = normal, 0x01 = inverted.
+  List<int> buildPhaseCommand(String channelLabel, bool inverted) {
+    final channel = DeviceProfiles.dsp408.channelIndex(channelLabel);
+    if (channel == null) {
+      throw ArgumentError('Invalid channel label: $channelLabel');
+    }
+
+    final dataBytes = [0x00, 0x01, 0x03, 0x36, channel, inverted ? 0x01 : 0x00];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
   }
 
   /// Convert GEQ dB value (-12.0 to +12.0) to protocol byte (0x00-0xF0)
@@ -260,11 +232,11 @@ class ProtocolService {
   /// Band: 0x00-0x1E (0-30, 20Hz-20kHz)
   /// Value: 0x00-0xF0 (0-240, -12.0 to +12.0 dB)
   List<int> buildGeqBandCommand(String channel, int bandIndex, double dB) {
-    const channelMap = {
-      'In A': 0x00, 'In B': 0x01, 'In C': 0x02, 'In D': 0x03,
-    };
-    final ch = channelMap[channel];
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
     if (ch == null) throw ArgumentError('Invalid GEQ channel: $channel');
+    if (!DeviceProfiles.dsp408.inputChannels.contains(channel)) {
+      throw ArgumentError('GEQ is only available on input channels: $channel');
+    }
     if (bandIndex < 0 || bandIndex > 30) {
       throw ArgumentError('Invalid band index: $bandIndex');
     }
@@ -275,32 +247,72 @@ class ProtocolService {
     return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
   }
 
+  /// Build GEQ bypass command (cmd 0x49)
+  ///
+  /// Protocol: `10 02 00 01 03 49 [channel] [bypass] 10 03 [checksum]`
+  List<int> buildGeqBypassCommand(String channel, bool bypass) {
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
+    if (ch == null) throw ArgumentError('Invalid GEQ channel: $channel');
+    if (!DeviceProfiles.dsp408.inputChannels.contains(channel)) {
+      throw ArgumentError('GEQ is only available on input channels: $channel');
+    }
+
+    final dataBytes = [0x00, 0x01, 0x03, 0x49, ch, bypass ? 0x01 : 0x00];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
   /// Build matrix routing command (cmd 0x3a)
   ///
   /// Protocol: `10 02 00 01 03 3a [output_byte] [input_bitmask] 10 03 [checksum]`
   /// Output byte: 0x04 = Out 1, ..., 0x0b = Out 8
   /// Input bitmask: 0x01 = In A, 0x02 = In B, 0x04 = In C, 0x08 = In D
   List<int> buildMatrixRoutingCommand(String output, int inputBitmask) {
-    const outputMap = {
-      'Out 1': 0x04, 'Out 2': 0x05, 'Out 3': 0x06, 'Out 4': 0x07,
-      'Out 5': 0x08, 'Out 6': 0x09, 'Out 7': 0x0A, 'Out 8': 0x0B,
-    };
-    final outputByte = outputMap[output];
+    final outputByte = DeviceProfiles.dsp408.channelIndex(output);
     if (outputByte == null) {
       throw ArgumentError('Invalid output label: $output');
+    }
+    if (!DeviceProfiles.dsp408.outputChannels.contains(output)) {
+      throw ArgumentError('Matrix output must be an output channel: $output');
     }
     final dataBytes = [0x00, 0x01, 0x03, 0x3a, outputByte, inputBitmask];
     final checksum = calculateChecksum(dataBytes);
     return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
   }
 
+  /// Build matrix attenuation command (cmd 0x41)
+  ///
+  /// Protocol: `10 02 00 01 05 41 [output] [input] [gain_lo] [gain_hi] 10 03 [checksum]`
+  /// Gain encoding matches channel gain: -60.0..0.0 dB.
+  List<int> buildMatrixGainCommand(String output, String input, double dB) {
+    final outputByte = DeviceProfiles.dsp408.channelIndex(output);
+    final inputByte = DeviceProfiles.dsp408.channelIndex(input);
+    if (outputByte == null ||
+        !DeviceProfiles.dsp408.outputChannels.contains(output)) {
+      throw ArgumentError('Invalid matrix output: $output');
+    }
+    if (inputByte == null ||
+        !DeviceProfiles.dsp408.inputChannels.contains(input)) {
+      throw ArgumentError('Invalid matrix input: $input');
+    }
+
+    final value = gainDbToValue(quantizeGain(dB.clamp(-60.0, 0.0)));
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x05,
+      0x41,
+      outputByte,
+      inputByte,
+      value & 0xFF,
+      (value >> 8) & 0xFF,
+    ];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
   /// Input bitmask constants for matrix routing
-  static const matrixInputBits = {
-    'In A': 0x01,
-    'In B': 0x02,
-    'In C': 0x04,
-    'In D': 0x08,
-  };
+  static final matrixInputBits = DeviceProfiles.dsp408.matrixInputBits;
 
   // ─── PEQ ───
 
@@ -322,7 +334,11 @@ class ProtocolService {
   int peqHzToFreq(double hz) {
     if (hz <= _peqMinFreq) return 0;
     if (hz >= _peqMaxFreq) return _peqFreqSteps;
-    return (math.log(hz / _peqMinFreq) / math.log(_peqFreqRatio) * _peqFreqSteps).round().clamp(0, _peqFreqSteps);
+    return (math.log(hz / _peqMinFreq) /
+            math.log(_peqFreqRatio) *
+            _peqFreqSteps)
+        .round()
+        .clamp(0, _peqFreqSteps);
   }
 
   /// PEQ Q encoding: log scale from 0.40 to 128.00 over 255 steps.
@@ -344,61 +360,339 @@ class ProtocolService {
 
   /// PEQ filter types
   static const peqTypeNames = [
-    'Peak', 'Low Shelf', 'High Shelf',
-    'LP -6dB', 'LP -12dB', 'HP -6dB', 'HP -12dB',
-    'All Pass 1', 'All Pass 2',
+    'Peak',
+    'Low Shelf',
+    'High Shelf',
+    'LP -6dB',
+    'LP -12dB',
+    'HP -6dB',
+    'HP -12dB',
+    'All Pass 1',
+    'All Pass 2',
   ];
 
   /// Hi/Lo Pass crossover slope types
   static const crossoverSlopeNames = [
-    'BW -6', 'BW -12', 'BW -18', 'BW -24', 'BW -30', 'BW -36', 'BW -42', 'BW -48',
-    'LR -12', 'LR -24', 'LR -36', 'LR -48',
-    'BS -6', 'BS -12', 'BS -18', 'BS -24', 'BS -30', 'BS -36', 'BS -42', 'BS -48',
+    'BW -6',
+    'BW -12',
+    'BW -18',
+    'BW -24',
+    'BW -30',
+    'BW -36',
+    'BW -42',
+    'BW -48',
+    'LR -12',
+    'LR -24',
+    'LR -36',
+    'LR -48',
+    'BS -6',
+    'BS -12',
+    'BS -18',
+    'BS -24',
+    'BS -30',
+    'BS -36',
+    'BS -42',
+    'BS -48',
   ];
 
   /// Build PEQ band command (cmd 0x33)
   ///
   /// Protocol: `10 02 00 01 0a 33 [ch] [band] [gain] [00] [freq_lo] [freq_hi] [Q] [type] [bypass] 10 03 [chk]`
-  List<int> buildPeqBandCommand(String channel, int band, {
+  List<int> buildPeqBandCommand(
+    String channel,
+    int band, {
     required double gainDb,
     required int freqRaw,
     required int qRaw,
     required int type,
     required bool bypass,
   }) {
-    const channelMap = {
-      'In A': 0x00, 'In B': 0x01, 'In C': 0x02, 'In D': 0x03,
-      'Out 1': 0x04, 'Out 2': 0x05, 'Out 3': 0x06, 'Out 4': 0x07,
-      'Out 5': 0x08, 'Out 6': 0x09, 'Out 7': 0x0A, 'Out 8': 0x0B,
-    };
-    final ch = channelMap[channel];
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
     if (ch == null) throw ArgumentError('Invalid PEQ channel: $channel');
 
     final gain = peqDbToGain(gainDb);
     final freqLo = freqRaw & 0xFF;
     final freqHi = (freqRaw >> 8) & 0xFF;
 
-    final dataBytes = [0x00, 0x01, 0x0a, 0x33, ch, band, gain, 0x00, freqLo, freqHi, qRaw & 0xFF, type, bypass ? 1 : 0];
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x0a,
+      0x33,
+      ch,
+      band,
+      gain,
+      0x00,
+      freqLo,
+      freqHi,
+      qRaw & 0xFF,
+      type,
+      bypass ? 1 : 0,
+    ];
     final checksum = calculateChecksum(dataBytes);
     return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
   }
 
   /// Build Hi Pass filter command (cmd 0x32)
   ///
-  /// Protocol: `10 02 00 01 05 32 [ch] [freq_lo] [freq_hi] [enable] 10 03 [chk]`
-  List<int> buildHiPassCommand(String channel, int freqRaw, bool enable) {
-    const channelMap = {
-      'In A': 0x00, 'In B': 0x01, 'In C': 0x02, 'In D': 0x03,
-      'Out 1': 0x04, 'Out 2': 0x05, 'Out 3': 0x06, 'Out 4': 0x07,
-      'Out 5': 0x08, 'Out 6': 0x09, 'Out 7': 0x0A, 'Out 8': 0x0B,
-    };
-    final ch = channelMap[channel];
+  /// Protocol: `10 02 00 01 05 32 [ch] [freq_lo] [freq_hi] [slope] 10 03 [chk]`
+  List<int> buildHiPassCommand(String channel, int freqRaw, int slope) {
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
     if (ch == null) throw ArgumentError('Invalid channel: $channel');
 
     final freqLo = freqRaw & 0xFF;
     final freqHi = (freqRaw >> 8) & 0xFF;
 
-    final dataBytes = [0x00, 0x01, 0x05, 0x32, ch, freqLo, freqHi, enable ? 1 : 0];
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x05,
+      0x32,
+      ch,
+      freqLo,
+      freqHi,
+      slope & 0xFF,
+    ];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Build channel name command (cmd 0x3d)
+  ///
+  /// Protocol: `10 02 00 01 0a 3d [channel] [8 ASCII bytes] 10 03 [checksum]`
+  List<int> buildChannelNameCommand(String channelLabel, String name) {
+    final channel = DeviceProfiles.dsp408.channelIndex(channelLabel);
+    if (channel == null) {
+      throw ArgumentError('Invalid channel label: $channelLabel');
+    }
+    final ascii = name.codeUnits
+        .where((c) => c >= 0x20 && c <= 0x7E)
+        .take(8)
+        .toList();
+    while (ascii.length < 8) {
+      ascii.add(0x00);
+    }
+
+    final dataBytes = [0x00, 0x01, 0x0A, 0x3D, channel, ...ascii];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  int thresholdDbToRaw(
+    double dB, {
+    required double minDb,
+    required double maxDb,
+  }) {
+    final clamped = dB.clamp(minDb, maxDb);
+    return ((clamped + 90.0) * 2.0).round();
+  }
+
+  int msMinusOneToRaw(int ms, {required int minMs, required int maxMs}) {
+    return ms.clamp(minMs, maxMs) - 1;
+  }
+
+  /// Build gate command (cmd 0x3e)
+  ///
+  /// Gate is available on input channels.
+  List<int> buildGateCommand(
+    String channel, {
+    required double thresholdDb,
+    required int attackMs,
+    required int holdMs,
+    required int releaseMs,
+  }) {
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
+    if (ch == null || !DeviceProfiles.dsp408.inputChannels.contains(channel)) {
+      throw ArgumentError('Invalid gate input channel: $channel');
+    }
+
+    final attack = msMinusOneToRaw(attackMs, minMs: 1, maxMs: 999);
+    final release = msMinusOneToRaw(releaseMs, minMs: 10, maxMs: 3000);
+    final hold = msMinusOneToRaw(holdMs, minMs: 10, maxMs: 999);
+    final threshold = thresholdDbToRaw(thresholdDb, minDb: -90.0, maxDb: 0.0);
+
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x0A,
+      0x3E,
+      ch,
+      attack & 0xFF,
+      (attack >> 8) & 0xFF,
+      release & 0xFF,
+      (release >> 8) & 0xFF,
+      hold & 0xFF,
+      (hold >> 8) & 0xFF,
+      threshold & 0xFF,
+      (threshold >> 8) & 0xFF,
+    ];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Compressor ratio values as encoded by the official editor.
+  static const compressorRatioNames = [
+    '1:1.0',
+    '1:1.7',
+    '1:2.0',
+    '1:2.5',
+    '1:3.0',
+    '1:3.5',
+    '1:4.0',
+    '1:5.0',
+    '1:6.0',
+    '1:8.0',
+    '1:10',
+    '1:20',
+    'Limit',
+  ];
+
+  static const Map<String, int> compressorRatioRawByName = {
+    '1:1.0': 0,
+    '1:1.7': 1,
+    '1:2.0': 2,
+    '1:2.5': 3,
+    '1:3.0': 4,
+    '1:3.5': 5,
+    '1:4.0': 9,
+    '1:5.0': 10,
+    '1:6.0': 11,
+    '1:8.0': 12,
+    '1:10': 13,
+    '1:20': 14,
+    'Limit': 15,
+  };
+
+  /// Build compressor command (cmd 0x30)
+  ///
+  /// Compressor is available on output channels.
+  List<int> buildCompressorCommand(
+    String channel, {
+    required double thresholdDb,
+    required int ratioRaw,
+    required int kneeDb,
+    required int attackMs,
+    required int releaseMs,
+  }) {
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
+    if (ch == null || !DeviceProfiles.dsp408.outputChannels.contains(channel)) {
+      throw ArgumentError('Invalid compressor output channel: $channel');
+    }
+
+    final ratio = ratioRaw.clamp(0, 15);
+    final attack = msMinusOneToRaw(attackMs, minMs: 1, maxMs: 999);
+    final release = msMinusOneToRaw(releaseMs, minMs: 10, maxMs: 3000);
+    final knee = kneeDb.clamp(0, 12);
+    final threshold = thresholdDbToRaw(thresholdDb, minDb: -90.0, maxDb: 20.0);
+
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x0C,
+      0x30,
+      ch,
+      ratio & 0xFF,
+      (ratio >> 8) & 0xFF,
+      attack & 0xFF,
+      (attack >> 8) & 0xFF,
+      release & 0xFF,
+      (release >> 8) & 0xFF,
+      knee & 0xFF,
+      (knee >> 8) & 0xFF,
+      threshold & 0xFF,
+      (threshold >> 8) & 0xFF,
+    ];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Build limiter command (cmd 0x3f)
+  ///
+  /// Limiter is available on output channels. The captured editor keeps an
+  /// unknown two-byte field at zero for the tested values.
+  List<int> buildLimiterCommand(
+    String channel, {
+    required double thresholdDb,
+    required int attackMs,
+    required int releaseMs,
+  }) {
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
+    if (ch == null || !DeviceProfiles.dsp408.outputChannels.contains(channel)) {
+      throw ArgumentError('Invalid limiter output channel: $channel');
+    }
+
+    final attack = msMinusOneToRaw(attackMs, minMs: 1, maxMs: 999);
+    final release = msMinusOneToRaw(releaseMs, minMs: 10, maxMs: 3000);
+    final threshold = thresholdDbToRaw(thresholdDb, minDb: -90.0, maxDb: 20.0);
+
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x0A,
+      0x3F,
+      ch,
+      attack & 0xFF,
+      (attack >> 8) & 0xFF,
+      release & 0xFF,
+      (release >> 8) & 0xFF,
+      0x00,
+      0x00,
+      threshold & 0xFF,
+      (threshold >> 8) & 0xFF,
+    ];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  int delayMsToRaw(double ms) => (ms.clamp(0.0, 680.0) * 96.0).round();
+  double delayRawToMs(int raw) => raw / 96.0;
+
+  /// Build delay command (cmd 0x38)
+  List<int> buildDelayCommand(String channel, double ms) {
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
+    if (ch == null) throw ArgumentError('Invalid delay channel: $channel');
+    final raw = delayMsToRaw(ms);
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x04,
+      0x38,
+      ch,
+      raw & 0xFF,
+      (raw >> 8) & 0xFF,
+    ];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Build delay display-unit command (cmd 0x15): 0=ms, 1=m, 2=ft.
+  List<int> buildDelayUnitCommand(int unit) {
+    final dataBytes = [0x00, 0x01, 0x02, 0x15, unit.clamp(0, 2)];
+    final checksum = calculateChecksum(dataBytes);
+    return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
+  }
+
+  /// Test tone sources used by the official editor.
+  static const testToneSources = {
+    'Analog Input': 0x00,
+    'Pink Noise': 0x01,
+    'White Noise': 0x02,
+    'Sine Wave': 0x03,
+  };
+
+  /// Build test tone command (cmd 0x39).
+  ///
+  /// For sine wave, frequencyIndex follows the 31 GEQ center frequencies
+  /// (`0x00`=20Hz, `0x11`=1kHz, `0x1e`=20kHz). Other sources use index 0.
+  List<int> buildTestToneCommand(int source, {int frequencyIndex = 0}) {
+    final dataBytes = [
+      0x00,
+      0x01,
+      0x03,
+      0x39,
+      source.clamp(0, 3),
+      frequencyIndex.clamp(0, 30),
+    ];
     final checksum = calculateChecksum(dataBytes);
     return [0x10, 0x02, ...dataBytes, 0x10, 0x03, checksum];
   }
@@ -407,12 +701,7 @@ class ProtocolService {
   ///
   /// Protocol: `10 02 00 01 05 31 [ch] [freq_lo] [freq_hi] [slope] 10 03 [chk]`
   List<int> buildLoPassCommand(String channel, int freqRaw, int slope) {
-    const channelMap = {
-      'In A': 0x00, 'In B': 0x01, 'In C': 0x02, 'In D': 0x03,
-      'Out 1': 0x04, 'Out 2': 0x05, 'Out 3': 0x06, 'Out 4': 0x07,
-      'Out 5': 0x08, 'Out 6': 0x09, 'Out 7': 0x0A, 'Out 8': 0x0B,
-    };
-    final ch = channelMap[channel];
+    final ch = DeviceProfiles.dsp408.channelIndex(channel);
     if (ch == null) throw ArgumentError('Invalid channel: $channel');
 
     final freqLo = freqRaw & 0xFF;

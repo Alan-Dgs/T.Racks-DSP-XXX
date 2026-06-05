@@ -1,0 +1,130 @@
+{
+  "device_model": "DSP206",
+  "language": "en",
+  "scenarios": [
+    {
+      "order": 1,
+      "key": "connection_dump",
+      "title": "Connection and initial dump",
+      "file_stem": "001_connection_dump",
+      "steps": [
+        "Start capture before connecting the official editor to the DSP206.",
+        "Set the official editor Online.",
+        "Wait until presets and current state are loaded, then click Action done."
+      ]
+    },
+    {
+      "order": 2,
+      "key": "phase",
+      "title": "Input/output phase",
+      "file_stem": "002_phase_ina_out1",
+      "steps": [
+        "Open Gain.",
+        "Set InA from Normal to Inverse, then click Action done.",
+        "Set InA back to Normal, then click Action done.",
+        "Set Out1 from Normal to Inverse, then click Action done.",
+        "Set Out1 back to Normal, then click Action done."
+      ]
+    },
+    {
+      "order": 3,
+      "key": "matrix_attenuation",
+      "title": "Matrix attenuation",
+      "file_stem": "003_matrix_attenuation_out1_ina",
+      "steps": [
+        "Open Matrix.",
+        "Set Out1/InA to +0.0 dB, then click Action done.",
+        "Set Out1/InA to -6.0 dB, then click Action done.",
+        "Set Out1/InA to -60.0 dB, then click Action done."
+      ]
+    },
+    {
+      "order": 4,
+      "key": "gate",
+      "title": "Gate InA",
+      "file_stem": "004_gate_ina",
+      "steps": [
+        "Open Gate.",
+        "On InA, set Threshold to -40.0 dB, then click Action done.",
+        "On InA, set Attack to 10 ms and Hold to 250 ms, then click Action done.",
+        "On InA, set Release to 750 ms, then click Action done."
+      ]
+    },
+    {
+      "order": 5,
+      "key": "comp_limit",
+      "title": "Comp + Limit Out1",
+      "file_stem": "005_comp_limit_out1",
+      "steps": [
+        "Open Comp.",
+        "On Out1, set Threshold to -20.0 dB, then click Action done.",
+        "On Out1, set Ratio to 1:4.0, then click Action done.",
+        "Open Limit.",
+        "On Out1, set Threshold to -10.0 dB, then click Action done."
+      ]
+    },
+    {
+      "order": 6,
+      "key": "delay",
+      "title": "Delay InA/Out1/Out6",
+      "file_stem": "006_delay_ina_out1_out6",
+      "steps": [
+        "Open Delay.",
+        "In ms, set InA to 1.000 ms, then click Action done.",
+        "In ms, set Out1 to 10.000 ms, then click Action done.",
+        "In ms, set Out6 to 20.000 ms, then click Action done."
+      ]
+    },
+    {
+      "order": 7,
+      "key": "peq_hpf_lpf",
+      "title": "PEQ + HPF/LPF",
+      "file_stem": "007_peq_hpf_lpf_ina_out1",
+      "steps": [
+        "Open InA.",
+        "Band 1: set Gain to +3.0 dB, then click Action done.",
+        "Band 1: change Type to Low Shelf, then click Action done.",
+        "HighPass: set 315.0 Hz and BW -24 slope, then click Action done.",
+        "Open Out1.",
+        "Band 9: set Gain to -3.0 dB, then click Action done."
+      ]
+    },
+    {
+      "order": 8,
+      "key": "geq",
+      "title": "GEQ InA",
+      "file_stem": "008_geq_ina",
+      "steps": [
+        "Open GEQ.",
+        "On InA, set 1 kHz to +3.0 dB, then click Action done.",
+        "Click EQ Bypass, then click Action done.",
+        "Click EQ Reset, confirm OK, then click Action done."
+      ]
+    },
+    {
+      "order": 9,
+      "key": "test_tone",
+      "title": "Test Tone",
+      "file_stem": "009_test_tone",
+      "steps": [
+        "Open Test Tone.",
+        "Select Analog Input, then click Action done.",
+        "Select Pink Noise, then click Action done.",
+        "Select White Noise, then click Action done.",
+        "Select Sine Wave 1 kHz, then click Action done."
+      ]
+    },
+    {
+      "order": 10,
+      "key": "channel_name",
+      "title": "Channel Name",
+      "file_stem": "010_channel_name",
+      "steps": [
+        "Open Channel Name.",
+        "Rename InA to 12345678, click Set, then click Action done.",
+        "Rename Out6 to 12345678, click Set, then click Action done.",
+        "Restore original names, then click Action done."
+      ]
+    }
+  ]
+}

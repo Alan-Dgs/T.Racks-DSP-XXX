@@ -30,11 +30,31 @@ class DSPInitializer extends ChangeNotifier {
   void _buildCommandQueue() {
     _commandQueue.clear();
     _commandQueue.addAll([
-      TRacksProto.handshakeCommand,                           // Handshake
-      TRacksProto.requestDeviceInfo,                          // Get device info
-      TRacksProto.requestAllPresetsCommand,                   // Request all presets
-      [0x10, 0x02, 0x00, 0x01, 0x01, 0x22, 0x10, 0x03, 0x23], // Unknown Loading Command - TODO: Figure this out
-      [0x10, 0x02, 0x00, 0x01, 0x01, 0x14, 0x10, 0x03, 0x15], // Unknown Loading Command - TODO: Figure this out
+      TRacksProto.handshakeCommand, // Handshake
+      TRacksProto.requestDeviceInfo, // Get device info
+      TRacksProto.requestAllPresetsCommand, // Request all presets
+      [
+        0x10,
+        0x02,
+        0x00,
+        0x01,
+        0x01,
+        0x22,
+        0x10,
+        0x03,
+        0x23,
+      ], // Unknown Loading Command - TODO: Figure this out
+      [
+        0x10,
+        0x02,
+        0x00,
+        0x01,
+        0x01,
+        0x14,
+        0x10,
+        0x03,
+        0x15,
+      ], // Unknown Loading Command - TODO: Figure this out
       // Load all 20 presets.
       ...TRacksProto.loadAllPresetsCommands,
       // Channel config dump (cmd 0x27, sub-indices 0x00-0x1C → triggers 0x24 responses)
@@ -51,6 +71,10 @@ class DSPInitializer extends ChangeNotifier {
   Map<String, List<PeqBand>> get peqBands => _configParser.peqBands;
   Map<String, FilterState> get hiPass => _configParser.hiPass;
   Map<String, FilterState> get loPass => _configParser.loPass;
+  Map<String, GateState> get gates => _configParser.gates;
+  Map<String, CompressorState> get compressors => _configParser.compressors;
+  Map<String, LimiterState> get limiters => _configParser.limiters;
+  Map<String, DelayState> get delays => _configParser.delays;
 
   /// Reset the initialization state
   void reset() {
@@ -195,8 +219,8 @@ class DSPInitializer extends ChangeNotifier {
 
 /// Result of attempting to send the next command
 enum SendCommandResult {
-  notConnected,  // Socket is not available
-  complete,      // All initialization commands sent
-  waiting,       // Already waiting for a response
-  sent,          // Command sent successfully
+  notConnected, // Socket is not available
+  complete, // All initialization commands sent
+  waiting, // Already waiting for a response
+  sent, // Command sent successfully
 }
