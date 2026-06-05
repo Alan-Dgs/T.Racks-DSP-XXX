@@ -1,7 +1,0 @@
-[Desktop Entry]
-Name=DSP
-Comment=A modern interface for the t.racks 408 DSP
-Exec=dsp
-Terminal=false
-Type=Application
-Categories=Audio;AudioVideo;

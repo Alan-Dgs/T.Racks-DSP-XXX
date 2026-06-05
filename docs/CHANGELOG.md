@@ -30,6 +30,9 @@
 - Fixed app test bootstrap to pump the real provider tree.
 - Replaced the default Flutter widget test with a DSP controller smoke test.
 
+### Removed
+- Removed legacy scratch PCAP analysis scripts, unused Flatpak packaging files, old Wireshark Lua helper, stale `package-lock.json`, and inherited GitHub release/build workflows.
+
 ### Security / Privacy
 - Excluded local captures, screenshots, logs, and scratch reverse-engineering files from Git.
 - Documented that `.pcapng` and official editor screenshots must not be published by default.
