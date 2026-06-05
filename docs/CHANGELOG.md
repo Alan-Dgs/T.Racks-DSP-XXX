@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Added refreshed README screenshots under `docs/images/`.
 - Added saved connection profiles for DSP host/port presets.
 - Added DSP408 device profile groundwork to reduce hard-coded channel lists.
 - Added guided capture helper based on Wireshark `dumpcap`.
@@ -17,6 +18,7 @@
 - Added a bottom Parsed Config panel for comparing decoded app state with the official editor.
 
 ### Changed
+- Rewrote the README to document current DSP408 status, experimental areas, and safety precautions.
 - Refactored selected widgets/providers to use the DSP408 device profile.
 - Updated HPF command handling from captured protocol behavior: last byte is slope/type.
 - Moved protocol and capture documentation under `docs/`.
