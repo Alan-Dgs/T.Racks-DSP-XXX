@@ -169,6 +169,43 @@ class MyApp extends StatelessWidget {
   }
 }
 
+class _ParsedConfigRow extends StatelessWidget {
+  final String channel;
+  final String details;
+
+  const _ParsedConfigRow({required this.channel, required this.details});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 72,
+            child: Text(
+              channel,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFFA6E22E),
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              details,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
 
@@ -199,6 +236,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _showConnect = false;
   bool _showDebug = false;
   bool _showTestTone = false;
+  bool _showParsedConfig = false;
   bool _showTimestamps = false;
   String? _selectedPreset;
   String? _lastSyncedPreset;
@@ -862,6 +900,8 @@ class _MyHomePageState extends State<MyHomePage> {
             if (_showTestTone)
               _buildTestTonePanel(deviceProvider, connectionProvider),
 
+            if (_showParsedConfig) _buildParsedConfigPanel(deviceProvider),
+
             // Debug panel
             if (_showDebug)
               SizedBox(
@@ -970,62 +1010,85 @@ class _MyHomePageState extends State<MyHomePage> {
             if (!narrow)
               Padding(
                 padding: const EdgeInsets.all(4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () =>
-                          setState(() => _showConnect = !_showConnect),
-                      icon: Icon(
-                        _showConnect
-                            ? Icons.keyboard_arrow_up
-                            : Icons.keyboard_arrow_down,
-                        size: 18,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () =>
+                            setState(() => _showConnect = !_showConnect),
+                        icon: Icon(
+                          _showConnect
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'Connection',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
-                      label: const Text(
-                        'Connection',
-                        style: TextStyle(fontSize: 12),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () =>
+                            setState(() => _showTestTone = !_showTestTone),
+                        icon: Icon(
+                          _showTestTone
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'Test Tone',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () =>
-                          setState(() => _showTestTone = !_showTestTone),
-                      icon: Icon(
-                        _showTestTone
-                            ? Icons.keyboard_arrow_up
-                            : Icons.keyboard_arrow_down,
-                        size: 18,
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () =>
+                            setState(() => _showDebug = !_showDebug),
+                        icon: Icon(
+                          _showDebug
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'Debug',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
-                      label: const Text(
-                        'Test Tone',
-                        style: TextStyle(fontSize: 12),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () => setState(
+                          () => _showParsedConfig = !_showParsedConfig,
+                        ),
+                        icon: Icon(
+                          _showParsedConfig
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'Parsed Config',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () => setState(() => _showDebug = !_showDebug),
-                      icon: Icon(
-                        _showDebug
-                            ? Icons.keyboard_arrow_up
-                            : Icons.keyboard_arrow_down,
-                        size: 18,
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () => SettingsOverlay.showSettingsOverlay(
+                          context,
+                          context.read<SocketService>(),
+                        ),
+                        icon: const Icon(Icons.settings, size: 18),
+                        label: const Text(
+                          'Settings',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
-                      label: const Text(
-                        'Debug',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () => SettingsOverlay.showSettingsOverlay(
-                        context,
-                        context.read<SocketService>(),
-                      ),
-                      icon: const Icon(Icons.settings, size: 18),
-                      label: const Text(
-                        'Settings',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
           ],
@@ -1050,6 +1113,88 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         Text(label, style: const TextStyle(fontSize: 11)),
       ],
+    );
+  }
+
+  Widget _buildParsedConfigPanel(DeviceProvider deviceProvider) {
+    final rows = deviceProvider.allChannels.map((channel) {
+      final isInput = deviceProvider.inputChannels.contains(channel);
+      final gain = isInput
+          ? deviceProvider.getInputGain(channel)
+          : deviceProvider.getOutputGain(channel);
+      final phase = isInput
+          ? deviceProvider.getInputPhase(channel)
+          : deviceProvider.getOutputPhase(channel);
+      final delay = deviceProvider.getDelay(channel).ms;
+      final hiPass = deviceProvider.getHiPass(channel);
+      final loPass = deviceProvider.getLoPass(channel);
+
+      final details = <String>[
+        'Gain ${gain.toStringAsFixed(1)} dB',
+        phase ? 'Phase inv' : 'Phase norm',
+        'Delay ${delay.toStringAsFixed(3)} ms',
+        'HPF raw ${hiPass.freqRaw} / slope ${hiPass.slope} / ${hiPass.enabled ? "on" : "off"}',
+        'LPF raw ${loPass.freqRaw} / slope ${loPass.slope} / ${loPass.enabled ? "on" : "off"}',
+      ];
+
+      if (isInput) {
+        final gate = deviceProvider.getGate(channel);
+        details.add(
+          'Gate th ${gate.thresholdDb.toStringAsFixed(1)} / A ${gate.attackMs} / H ${gate.holdMs} / R ${gate.releaseMs}',
+        );
+      } else {
+        final comp = deviceProvider.getCompressor(channel);
+        final limit = deviceProvider.getLimiter(channel);
+        details.add(
+          'Comp th ${comp.thresholdDb.toStringAsFixed(1)} / ratio ${comp.ratioRaw} / knee ${comp.kneeDb} / A ${comp.attackMs} / R ${comp.releaseMs}',
+        );
+        details.add(
+          'Limit th ${limit.thresholdDb.toStringAsFixed(1)} / A ${limit.attackMs} / R ${limit.releaseMs}',
+        );
+      }
+
+      return _ParsedConfigRow(
+        channel: deviceProvider.getAlias(channel),
+        details: details.join(' | '),
+      );
+    }).toList();
+
+    return SizedBox(
+      height: 220,
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(10, 8, 10, 4),
+              child: Row(
+                children: [
+                  Icon(Icons.manage_search, size: 18),
+                  SizedBox(width: 8),
+                  Text(
+                    'Parsed Config',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  Spacer(),
+                  Text(
+                    'Current app state after config dump / preset load',
+                    style: TextStyle(color: Color(0xFF75715E), fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                itemCount: rows.length,
+                separatorBuilder: (_, _) =>
+                    const Divider(height: 1, color: Color(0xFF3E3D32)),
+                itemBuilder: (context, index) => rows[index],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

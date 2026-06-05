@@ -14,6 +14,7 @@
 - Added protocol tests based on captured DSP408 frames.
 - Added config-dump parser coverage for DSP408 dynamics and delay state.
 - Added a bottom Test Tone panel wired to the captured DSP408 test tone command.
+- Added a bottom Parsed Config panel for comparing decoded app state with the official editor.
 
 ### Changed
 - Refactored selected widgets/providers to use the DSP408 device profile.
@@ -23,6 +24,7 @@
 ### Fixed
 - Fixed Gate, Compressor, Limiter, and Delay tabs so they load current/preset config instead of starting from defaults.
 - Fixed DSP408 output config offsets for Compressor, Limiter, and Delay parsing.
+- Fixed DSP408 output PEQ config parsing so the 9 output bands start at the correct offset.
 - Fixed app test bootstrap to pump the real provider tree.
 - Replaced the default Flutter widget test with a DSP controller smoke test.
 

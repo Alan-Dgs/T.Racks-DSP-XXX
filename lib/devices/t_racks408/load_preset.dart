@@ -314,7 +314,8 @@ class ChannelConfigParser {
     }
 
     // Extract PEQ bands for output channels.
-    // Each output has 9 PEQ bands × 6 bytes at channelOffset + 18 (after 18-byte header).
+    // Each output has 9 PEQ bands x 6 bytes at channelOffset + 24.
+    // The first 24 bytes contain output header/routing/gain fields.
     for (final output in [
       'Out 1',
       'Out 2',
@@ -328,7 +329,7 @@ class ChannelConfigParser {
       final offset = channelOffsets[output];
       if (offset == null) continue;
 
-      final peqStart = offset + 18; // 18-byte header
+      final peqStart = offset + 24;
       final peqEnd = peqStart + 9 * 6;
       if (peqEnd > stream.length) continue;
 
@@ -342,16 +343,9 @@ class ChannelConfigParser {
         'Config: $output PEQ loaded (${bands.where((b) => b.gainDb != 0.0).length} non-zero bands)',
       );
 
-      // Output filter data: after PEQ bands at peqEnd
-      // Bytes 0-1: HPF freq LE16, bytes 2-3: unknown, bytes 4-7: unknown,
-      // bytes 8-9: LPF freq LE16 (from pattern analysis)
-      if (peqEnd + 10 <= stream.length) {
-        final hpfFreq = stream[peqEnd] | (stream[peqEnd + 1] << 8);
-        final lpfFreq = stream[peqEnd + 8] | (stream[peqEnd + 9] << 8);
-        _hiPass[output] = FilterState(freqRaw: hpfFreq, enabled: hpfFreq > 0);
-        _loPass[output] = FilterState(freqRaw: lpfFreq);
-        debugPrint('Config: $output HPF=$hpfFreq LPF=$lpfFreq');
-      }
+      // Output HPF/LPF fields are not yet mapped safely from the config dump.
+      // Commands are implemented, but applying guessed offsets here would make
+      // the UI lie after connection/preset load.
 
       final compressorStart = offset + 78;
       if (compressorStart + 10 <= stream.length) {

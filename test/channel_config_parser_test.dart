@@ -33,6 +33,11 @@ void main() {
       _writeLe16(stream, offsets['InA']! + 14, 100); // -40.0 dB
       _writeLe16(stream, offsets['InA']! + 136, 96); // 1.000 ms
 
+      _writeLe16(stream, offsets['Out1']! + 72, 90); // PEQ band 9 -3.0 dB
+      _writeLe16(stream, offsets['Out1']! + 74, 285); // PEQ band 9 freq raw
+      stream[offsets['Out1']! + 76] = 35; // PEQ band 9 Q raw
+      stream[offsets['Out1']! + 77] = 0; // PEQ band 9 type
+
       _writeLe16(stream, offsets['Out1']! + 78, 9); // 1:4.0
       _writeLe16(stream, offsets['Out1']! + 80, 24); // attack 25 ms
       _writeLe16(stream, offsets['Out1']! + 82, 799); // release 800 ms
@@ -57,6 +62,12 @@ void main() {
       expect(gate.attackMs, 10);
       expect(gate.holdMs, 250);
       expect(gate.releaseMs, 750);
+
+      final outPeq = parser.peqBands['Out 1']!;
+      expect(outPeq.length, 9);
+      expect(outPeq[8].gainDb, -3.0);
+      expect(outPeq[8].freqRaw, 285);
+      expect(outPeq[8].qRaw, 35);
 
       final comp = parser.compressors['Out 1']!;
       expect(comp.thresholdDb, -20.0);
