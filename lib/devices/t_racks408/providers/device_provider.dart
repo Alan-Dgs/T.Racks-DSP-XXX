@@ -144,7 +144,10 @@ class CompressorState {
   factory CompressorState.fromJson(Map<String, dynamic> json) =>
       CompressorState(
         thresholdDb: (json['thresholdDb'] as num?)?.toDouble() ?? 20.0,
-        ratioRaw: (json['ratioRaw'] as num?)?.round() ?? 0,
+        ratioRaw: ((json['ratioRaw'] as num?)?.round() ?? 0).clamp(
+          0,
+          ProtocolService.compressorRatioNames.length - 1,
+        ),
         kneeDb: (json['kneeDb'] as num?)?.round() ?? 0,
         attackMs: (json['attackMs'] as num?)?.round() ?? 1,
         releaseMs: (json['releaseMs'] as num?)?.round() ?? 10,
@@ -683,7 +686,12 @@ class DeviceProvider extends ChangeNotifier {
     if (thresholdDb != null) {
       state.thresholdDb = _quantizeHalfDb(thresholdDb.clamp(-90.0, 20.0));
     }
-    if (ratioRaw != null) state.ratioRaw = ratioRaw.clamp(0, 15);
+    if (ratioRaw != null) {
+      state.ratioRaw = ratioRaw.clamp(
+        0,
+        ProtocolService.compressorRatioNames.length - 1,
+      );
+    }
     if (kneeDb != null) state.kneeDb = kneeDb.clamp(0, 12);
     if (attackMs != null) state.attackMs = attackMs.clamp(1, 999);
     if (releaseMs != null) state.releaseMs = releaseMs.clamp(10, 3000);

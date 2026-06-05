@@ -136,8 +136,16 @@ Attack 25 ms       10 02 00 01 0c 30 04 09 00 18 00 f3 01 06 00 8c 00 10 03 51
 Release 800 ms     10 02 00 01 0c 30 04 09 00 18 00 1f 03 06 00 8c 00 10 03 bf
 ```
 
-Ratio mapping confirmed by UI for the tested point:
-- `0x0009` -> `1:4.0`
+Compressor ratio list confirmed from the official UI:
+
+```text
+1:1.0, 1:1.1, 1:1.2, 1:1.3, 1:1.4, 1:1.5, 1:1.6, 1:1.7,
+1:2.0, 1:2.5, 1:3.0, 1:3.5, 1:4.0, 1:5.0, 1:6.0,
+1:8.0, 1:10, 1:20, Limit
+```
+
+The full raw mapping still needs a dedicated ratio-only capture sweep. Earlier
+single-point capture notes around `1:4.0` should be treated as incomplete.
 
 ### Limiter, cmd `0x3f`
 

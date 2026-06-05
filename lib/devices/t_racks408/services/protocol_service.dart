@@ -533,6 +533,12 @@ class ProtocolService {
   /// Compressor ratio values as encoded by the official editor.
   static const compressorRatioNames = [
     '1:1.0',
+    '1:1.1',
+    '1:1.2',
+    '1:1.3',
+    '1:1.4',
+    '1:1.5',
+    '1:1.6',
     '1:1.7',
     '1:2.0',
     '1:2.5',
@@ -547,20 +553,9 @@ class ProtocolService {
     'Limit',
   ];
 
-  static const Map<String, int> compressorRatioRawByName = {
-    '1:1.0': 0,
-    '1:1.7': 1,
-    '1:2.0': 2,
-    '1:2.5': 3,
-    '1:3.0': 4,
-    '1:3.5': 5,
-    '1:4.0': 9,
-    '1:5.0': 10,
-    '1:6.0': 11,
-    '1:8.0': 12,
-    '1:10': 13,
-    '1:20': 14,
-    'Limit': 15,
+  static final Map<String, int> compressorRatioRawByName = {
+    for (int i = 0; i < compressorRatioNames.length; i++)
+      compressorRatioNames[i]: i,
   };
 
   /// Build compressor command (cmd 0x30)
@@ -579,7 +574,7 @@ class ProtocolService {
       throw ArgumentError('Invalid compressor output channel: $channel');
     }
 
-    final ratio = ratioRaw.clamp(0, 15);
+    final ratio = ratioRaw.clamp(0, compressorRatioNames.length - 1);
     final attack = msMinusOneToRaw(attackMs, minMs: 1, maxMs: 999);
     final release = msMinusOneToRaw(releaseMs, minMs: 10, maxMs: 3000);
     final knee = kneeDb.clamp(0, 12);

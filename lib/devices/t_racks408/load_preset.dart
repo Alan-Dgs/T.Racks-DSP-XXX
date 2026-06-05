@@ -350,7 +350,10 @@ class ChannelConfigParser {
       final compressorStart = offset + 78;
       if (compressorStart + 10 <= stream.length) {
         _compressors[output] = CompressorState(
-          ratioRaw: _readLe16(stream, compressorStart).clamp(0, 15),
+          ratioRaw: _readLe16(
+            stream,
+            compressorStart,
+          ).clamp(0, ProtocolService.compressorRatioNames.length - 1),
           attackMs: _msMinusOneRawToMs(
             _readLe16(stream, compressorStart + 2),
             1,

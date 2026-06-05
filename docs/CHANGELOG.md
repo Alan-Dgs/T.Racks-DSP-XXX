@@ -31,6 +31,7 @@
 - Fixed Gate, Compressor, Limiter, and Delay tabs so they load current/preset config instead of starting from defaults.
 - Fixed DSP408 output config offsets for Compressor, Limiter, and Delay parsing.
 - Fixed DSP408 output PEQ config parsing so the 9 output bands start at the correct offset.
+- Fixed the Compressor ratio dropdown to include the full official UI range from `1:1.0` through `Limit`.
 - Fixed app test bootstrap to pump the real provider tree.
 - Replaced the default Flutter widget test with a DSP controller smoke test.
 
