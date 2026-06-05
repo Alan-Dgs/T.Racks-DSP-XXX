@@ -11,6 +11,6 @@ void main() {
 
     expect(find.text('DSP408 Controller'), findsOneWidget);
     expect(find.text('Disconnected'), findsOneWidget);
-    expect(find.text('Not Connected'), findsOneWidget);
+    expect(find.text('Offline edit mode'), findsOneWidget);
   });
 }

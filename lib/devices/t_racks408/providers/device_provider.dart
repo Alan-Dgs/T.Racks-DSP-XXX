@@ -33,6 +33,22 @@ class PeqBand {
     type: type,
     bypass: bypass,
   );
+
+  Map<String, dynamic> toJson() => {
+    'freqRaw': freqRaw,
+    'qRaw': qRaw,
+    'gainDb': gainDb,
+    'type': type,
+    'bypass': bypass,
+  };
+
+  factory PeqBand.fromJson(Map<String, dynamic> json) => PeqBand(
+    freqRaw: (json['freqRaw'] as num?)?.round() ?? 120,
+    qRaw: (json['qRaw'] as num?)?.round() ?? 35,
+    gainDb: (json['gainDb'] as num?)?.toDouble() ?? 0.0,
+    type: (json['type'] as num?)?.round() ?? 0,
+    bypass: json['bypass'] == true,
+  );
 }
 
 /// State for a Hi/Lo Pass filter
@@ -42,6 +58,21 @@ class FilterState {
   bool enabled;
 
   FilterState({this.freqRaw = 0, this.slope = 0, this.enabled = false});
+
+  FilterState copy() =>
+      FilterState(freqRaw: freqRaw, slope: slope, enabled: enabled);
+
+  Map<String, dynamic> toJson() => {
+    'freqRaw': freqRaw,
+    'slope': slope,
+    'enabled': enabled,
+  };
+
+  factory FilterState.fromJson(Map<String, dynamic> json) => FilterState(
+    freqRaw: (json['freqRaw'] as num?)?.round() ?? 0,
+    slope: (json['slope'] as num?)?.round() ?? 0,
+    enabled: json['enabled'] == true,
+  );
 }
 
 class GateState {
@@ -62,6 +93,20 @@ class GateState {
     attackMs: attackMs,
     holdMs: holdMs,
     releaseMs: releaseMs,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'thresholdDb': thresholdDb,
+    'attackMs': attackMs,
+    'holdMs': holdMs,
+    'releaseMs': releaseMs,
+  };
+
+  factory GateState.fromJson(Map<String, dynamic> json) => GateState(
+    thresholdDb: (json['thresholdDb'] as num?)?.toDouble() ?? -90.0,
+    attackMs: (json['attackMs'] as num?)?.round() ?? 1,
+    holdMs: (json['holdMs'] as num?)?.round() ?? 10,
+    releaseMs: (json['releaseMs'] as num?)?.round() ?? 10,
   );
 }
 
@@ -87,6 +132,23 @@ class CompressorState {
     attackMs: attackMs,
     releaseMs: releaseMs,
   );
+
+  Map<String, dynamic> toJson() => {
+    'thresholdDb': thresholdDb,
+    'ratioRaw': ratioRaw,
+    'kneeDb': kneeDb,
+    'attackMs': attackMs,
+    'releaseMs': releaseMs,
+  };
+
+  factory CompressorState.fromJson(Map<String, dynamic> json) =>
+      CompressorState(
+        thresholdDb: (json['thresholdDb'] as num?)?.toDouble() ?? 20.0,
+        ratioRaw: (json['ratioRaw'] as num?)?.round() ?? 0,
+        kneeDb: (json['kneeDb'] as num?)?.round() ?? 0,
+        attackMs: (json['attackMs'] as num?)?.round() ?? 1,
+        releaseMs: (json['releaseMs'] as num?)?.round() ?? 10,
+      );
 }
 
 class LimiterState {
@@ -105,6 +167,18 @@ class LimiterState {
     attackMs: attackMs,
     releaseMs: releaseMs,
   );
+
+  Map<String, dynamic> toJson() => {
+    'thresholdDb': thresholdDb,
+    'attackMs': attackMs,
+    'releaseMs': releaseMs,
+  };
+
+  factory LimiterState.fromJson(Map<String, dynamic> json) => LimiterState(
+    thresholdDb: (json['thresholdDb'] as num?)?.toDouble() ?? 20.0,
+    attackMs: (json['attackMs'] as num?)?.round() ?? 1,
+    releaseMs: (json['releaseMs'] as num?)?.round() ?? 10,
+  );
 }
 
 class DelayState {
@@ -113,6 +187,11 @@ class DelayState {
   DelayState({this.ms = 0.0});
 
   DelayState copy() => DelayState(ms: ms);
+
+  Map<String, dynamic> toJson() => {'ms': ms};
+
+  factory DelayState.fromJson(Map<String, dynamic> json) =>
+      DelayState(ms: (json['ms'] as num?)?.toDouble() ?? 0.0);
 }
 
 class TestToneState {
@@ -123,6 +202,16 @@ class TestToneState {
 
   TestToneState copy() =>
       TestToneState(source: source, frequencyIndex: frequencyIndex);
+
+  Map<String, dynamic> toJson() => {
+    'source': source,
+    'frequencyIndex': frequencyIndex,
+  };
+
+  factory TestToneState.fromJson(Map<String, dynamic> json) => TestToneState(
+    source: (json['source'] as num?)?.round() ?? 0,
+    frequencyIndex: (json['frequencyIndex'] as num?)?.round() ?? 0,
+  );
 }
 
 class DeviceProvider extends ChangeNotifier {
@@ -222,6 +311,8 @@ class DeviceProvider extends ChangeNotifier {
 
   TestToneState _testTone = TestToneState();
 
+  bool _hasLocalChanges = false;
+
   // Channel aliases
   final Map<String, String> _channelAliases = {};
 
@@ -269,6 +360,7 @@ class DeviceProvider extends ChangeNotifier {
     final key = '$output:$input';
     final quantized = _protocolService.quantizeGain(dB.clamp(-60.0, 0.0));
     _matrixGains[key] = quantized;
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -288,14 +380,14 @@ class DeviceProvider extends ChangeNotifier {
 
   /// Toggle a matrix input for an output and send the routing command
   void toggleMatrixInput(String output, String input) {
-    if (!_socketService.isConnected) return;
-
     final bit = ProtocolService.matrixInputBits[input] ?? 0;
     final current = _matrixRouting[output] ?? 0;
     final newBitmask = current ^ bit;
     _matrixRouting[output] = newBitmask;
+    _markLocalChange();
     notifyListeners();
 
+    if (!_socketService.isConnected) return;
     final command = _protocolService.buildMatrixRoutingCommand(
       output,
       newBitmask,
@@ -327,6 +419,7 @@ class DeviceProvider extends ChangeNotifier {
   Future<void> setAlias(String channel, String alias) async {
     final cleanAlias = alias.trim();
     _channelAliases[channel] = cleanAlias;
+    _markLocalChange();
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('channel_alias_$channel', cleanAlias);
@@ -342,6 +435,7 @@ class DeviceProvider extends ChangeNotifier {
   /// Reset a channel alias back to default
   Future<void> resetAlias(String channel) async {
     _channelAliases.remove(channel);
+    _markLocalChange();
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('channel_alias_$channel');
@@ -364,6 +458,7 @@ class DeviceProvider extends ChangeNotifier {
 
     final quantized = _protocolService.quantizeGeqDb(dB.clamp(-12.0, 12.0));
     bands[bandIndex] = quantized;
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -394,6 +489,7 @@ class DeviceProvider extends ChangeNotifier {
   void setGeqBypass(String channel, bool bypass) {
     if (!_geqBypass.containsKey(channel)) return;
     _geqBypass[channel] = bypass;
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -405,6 +501,7 @@ class DeviceProvider extends ChangeNotifier {
   void setAllGeqBands(String channel, List<double> values) {
     if (values.length != 31) return;
     _geqBands[channel] = values.map((v) => v.clamp(-12.0, 12.0)).toList();
+    _markLocalChange();
     notifyListeners();
   }
 
@@ -442,6 +539,22 @@ class DeviceProvider extends ChangeNotifier {
 
   TestToneState get testTone => _testTone.copy();
 
+  bool get hasLocalChanges => _hasLocalChanges;
+
+  void _markLocalChange() {
+    _hasLocalChanges = true;
+  }
+
+  void markSynced() {
+    _hasLocalChanges = false;
+    notifyListeners();
+  }
+
+  void clearLocalChangeFlag() {
+    _hasLocalChanges = false;
+    notifyListeners();
+  }
+
   /// Set a PEQ band parameter and send to device (throttled 50ms per channel+band)
   void setPeqBand(
     String channel,
@@ -461,6 +574,7 @@ class DeviceProvider extends ChangeNotifier {
     if (qRaw != null) b.qRaw = qRaw.clamp(0, 255);
     if (type != null) b.type = type.clamp(0, 8);
     if (bypass != null) b.bypass = bypass;
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -494,6 +608,7 @@ class DeviceProvider extends ChangeNotifier {
     if (freqRaw != null) state.freqRaw = freqRaw.clamp(0, 1000);
     if (enabled != null) state.enabled = enabled;
     if (slope != null) state.slope = slope.clamp(0, 19);
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -512,6 +627,7 @@ class DeviceProvider extends ChangeNotifier {
     if (freqRaw != null) state.freqRaw = freqRaw.clamp(0, 1000);
     if (slope != null) state.slope = slope.clamp(0, 19);
     if (enabled != null) state.enabled = enabled;
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -540,6 +656,7 @@ class DeviceProvider extends ChangeNotifier {
     if (attackMs != null) state.attackMs = attackMs.clamp(1, 999);
     if (holdMs != null) state.holdMs = holdMs.clamp(10, 999);
     if (releaseMs != null) state.releaseMs = releaseMs.clamp(10, 3000);
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -570,6 +687,7 @@ class DeviceProvider extends ChangeNotifier {
     if (kneeDb != null) state.kneeDb = kneeDb.clamp(0, 12);
     if (attackMs != null) state.attackMs = attackMs.clamp(1, 999);
     if (releaseMs != null) state.releaseMs = releaseMs.clamp(10, 3000);
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -597,6 +715,7 @@ class DeviceProvider extends ChangeNotifier {
     }
     if (attackMs != null) state.attackMs = attackMs.clamp(1, 999);
     if (releaseMs != null) state.releaseMs = releaseMs.clamp(10, 3000);
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -613,6 +732,7 @@ class DeviceProvider extends ChangeNotifier {
     final state = _delays[channel];
     if (state == null) return;
     state.ms = ((ms.clamp(0.0, 680.0) * 1000).round() / 1000.0).toDouble();
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -622,6 +742,7 @@ class DeviceProvider extends ChangeNotifier {
 
   void setDelayUnit(int unit) {
     _delayUnit = unit.clamp(0, 2);
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -634,6 +755,7 @@ class DeviceProvider extends ChangeNotifier {
       source: (source ?? _testTone.source).clamp(0, 3),
       frequencyIndex: (frequencyIndex ?? _testTone.frequencyIndex).clamp(0, 30),
     );
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -642,6 +764,324 @@ class DeviceProvider extends ChangeNotifier {
       frequencyIndex: _testTone.frequencyIndex,
     );
     _socketService.enqueue(command);
+  }
+
+  Map<String, dynamic> exportOfflineSnapshot() => {
+    'schemaVersion': 1,
+    'device': 'DSP408',
+    'exportedAt': DateTime.now().toUtc().toIso8601String(),
+    'currentPreset': _currentPreset,
+    'hasLocalChanges': _hasLocalChanges,
+    'aliases': Map<String, String>.from(_channelAliases),
+    'inputGains': Map<String, double>.from(_inputGains),
+    'outputGains': Map<String, double>.from(_outputGains),
+    'inputMutes': Map<String, bool>.from(_inputMutes),
+    'outputMutes': Map<String, bool>.from(_outputMutes),
+    'inputPhase': Map<String, bool>.from(_inputPhase),
+    'outputPhase': Map<String, bool>.from(_outputPhase),
+    'matrixRouting': Map<String, int>.from(_matrixRouting),
+    'matrixGains': Map<String, double>.from(_matrixGains),
+    'geqBypass': Map<String, bool>.from(_geqBypass),
+    'geqBands': _geqBands.map((key, value) => MapEntry(key, List.of(value))),
+    'peqBands': _peqBands.map(
+      (key, value) =>
+          MapEntry(key, value.map((band) => band.toJson()).toList()),
+    ),
+    'hiPass': _hiPass.map((key, value) => MapEntry(key, value.toJson())),
+    'loPass': _loPass.map((key, value) => MapEntry(key, value.toJson())),
+    'gates': _gates.map((key, value) => MapEntry(key, value.toJson())),
+    'compressors': _compressors.map(
+      (key, value) => MapEntry(key, value.toJson()),
+    ),
+    'limiters': _limiters.map((key, value) => MapEntry(key, value.toJson())),
+    'delays': _delays.map((key, value) => MapEntry(key, value.toJson())),
+    'delayUnit': _delayUnit,
+    'testTone': _testTone.toJson(),
+  };
+
+  void applyOfflineSnapshot(Map<String, dynamic> snapshot) {
+    final device = snapshot['device'];
+    if (device != null && device != 'DSP408') {
+      throw const FormatException('Offline snapshot is not for DSP408');
+    }
+
+    _applyDoubleMap(_inputGains, snapshot['inputGains'], -12.0, 12.0);
+    _applyDoubleMap(_outputGains, snapshot['outputGains'], -12.0, 12.0);
+    _applyBoolMap(_inputMutes, snapshot['inputMutes']);
+    _applyBoolMap(_outputMutes, snapshot['outputMutes']);
+    _applyBoolMap(_inputPhase, snapshot['inputPhase']);
+    _applyBoolMap(_outputPhase, snapshot['outputPhase']);
+    _applyIntMap(_matrixRouting, snapshot['matrixRouting'], 0, 15);
+    _applyDoubleMap(_matrixGains, snapshot['matrixGains'], -60.0, 0.0);
+    _applyBoolMap(_geqBypass, snapshot['geqBypass']);
+
+    for (final entry in _asMap(snapshot['aliases']).entries) {
+      if (allChannels.contains(entry.key) && entry.value is String) {
+        _channelAliases[entry.key] = (entry.value as String).trim();
+      }
+    }
+
+    for (final entry in _asMap(snapshot['geqBands']).entries) {
+      final bands = _geqBands[entry.key];
+      final values = _asList(entry.value);
+      if (bands == null || values.length != 31) continue;
+      _geqBands[entry.key] = values
+          .map((value) => _num(value, 0.0).clamp(-12.0, 12.0).toDouble())
+          .toList();
+    }
+
+    for (final entry in _asMap(snapshot['peqBands']).entries) {
+      final bands = _peqBands[entry.key];
+      final values = _asList(entry.value);
+      if (bands == null || values.length != bands.length) continue;
+      for (int i = 0; i < bands.length; i++) {
+        bands[i] = PeqBand.fromJson(_asMap(values[i]));
+      }
+    }
+
+    _applyFilterMap(_hiPass, snapshot['hiPass']);
+    _applyFilterMap(_loPass, snapshot['loPass']);
+    _applyGateMap(_gates, snapshot['gates']);
+    _applyCompressorMap(_compressors, snapshot['compressors']);
+    _applyLimiterMap(_limiters, snapshot['limiters']);
+    _applyDelayMap(_delays, snapshot['delays']);
+
+    _delayUnit = _int(snapshot['delayUnit'], _delayUnit).clamp(0, 2);
+    final tone = snapshot['testTone'];
+    if (tone is Map) {
+      _testTone = TestToneState.fromJson(_asMap(tone));
+    }
+
+    _markLocalChange();
+    notifyListeners();
+  }
+
+  bool pushCurrentStateToDevice() {
+    if (!_socketService.isConnected) return false;
+
+    final commands = <List<int>>[];
+
+    for (final entry in _inputGains.entries) {
+      commands.add(_protocolService.buildGainCommand(entry.key, entry.value));
+    }
+    for (final entry in _outputGains.entries) {
+      commands.add(_protocolService.buildGainCommand(entry.key, entry.value));
+    }
+    for (final entry in _inputMutes.entries) {
+      commands.add(_protocolService.buildMuteCommand(entry.key, entry.value));
+    }
+    for (final entry in _outputMutes.entries) {
+      commands.add(_protocolService.buildMuteCommand(entry.key, entry.value));
+    }
+    for (final entry in _inputPhase.entries) {
+      commands.add(_protocolService.buildPhaseCommand(entry.key, entry.value));
+    }
+    for (final entry in _outputPhase.entries) {
+      commands.add(_protocolService.buildPhaseCommand(entry.key, entry.value));
+    }
+    for (final entry in _matrixRouting.entries) {
+      commands.add(
+        _protocolService.buildMatrixRoutingCommand(entry.key, entry.value),
+      );
+    }
+    for (final output in outputChannels) {
+      for (final input in inputChannels) {
+        commands.add(
+          _protocolService.buildMatrixGainCommand(
+            output,
+            input,
+            getMatrixGain(output, input),
+          ),
+        );
+      }
+    }
+    for (final entry in _geqBypass.entries) {
+      commands.add(
+        _protocolService.buildGeqBypassCommand(entry.key, entry.value),
+      );
+    }
+    for (final entry in _geqBands.entries) {
+      for (int i = 0; i < entry.value.length; i++) {
+        commands.add(
+          _protocolService.buildGeqBandCommand(entry.key, i, entry.value[i]),
+        );
+      }
+    }
+    for (final entry in _peqBands.entries) {
+      for (int i = 0; i < entry.value.length; i++) {
+        final band = entry.value[i];
+        commands.add(
+          _protocolService.buildPeqBandCommand(
+            entry.key,
+            i,
+            gainDb: band.gainDb,
+            freqRaw: band.freqRaw,
+            qRaw: band.qRaw,
+            type: band.type,
+            bypass: band.bypass,
+          ),
+        );
+      }
+    }
+    for (final entry in _hiPass.entries) {
+      commands.add(
+        _protocolService.buildHiPassCommand(
+          entry.key,
+          entry.value.freqRaw,
+          entry.value.enabled ? entry.value.slope : 0,
+        ),
+      );
+    }
+    for (final entry in _loPass.entries) {
+      commands.add(
+        _protocolService.buildLoPassCommand(
+          entry.key,
+          entry.value.enabled ? entry.value.freqRaw : 1000,
+          entry.value.slope,
+        ),
+      );
+    }
+    for (final entry in _gates.entries) {
+      commands.add(
+        _protocolService.buildGateCommand(
+          entry.key,
+          thresholdDb: entry.value.thresholdDb,
+          attackMs: entry.value.attackMs,
+          holdMs: entry.value.holdMs,
+          releaseMs: entry.value.releaseMs,
+        ),
+      );
+    }
+    for (final entry in _compressors.entries) {
+      commands.add(
+        _protocolService.buildCompressorCommand(
+          entry.key,
+          thresholdDb: entry.value.thresholdDb,
+          ratioRaw: entry.value.ratioRaw,
+          kneeDb: entry.value.kneeDb,
+          attackMs: entry.value.attackMs,
+          releaseMs: entry.value.releaseMs,
+        ),
+      );
+    }
+    for (final entry in _limiters.entries) {
+      commands.add(
+        _protocolService.buildLimiterCommand(
+          entry.key,
+          thresholdDb: entry.value.thresholdDb,
+          attackMs: entry.value.attackMs,
+          releaseMs: entry.value.releaseMs,
+        ),
+      );
+    }
+    for (final entry in _delays.entries) {
+      commands.add(
+        _protocolService.buildDelayCommand(entry.key, entry.value.ms),
+      );
+    }
+    commands.add(_protocolService.buildDelayUnitCommand(_delayUnit));
+    for (final entry in _channelAliases.entries) {
+      if (entry.value.trim().isNotEmpty) {
+        commands.add(
+          _protocolService.buildChannelNameCommand(entry.key, entry.value),
+        );
+      }
+    }
+
+    _socketService.enqueueAll(commands);
+    _hasLocalChanges = false;
+    notifyListeners();
+    return true;
+  }
+
+  static Map<String, dynamic> _asMap(Object? value) {
+    if (value is! Map) return {};
+    return value.map((key, value) => MapEntry(key.toString(), value));
+  }
+
+  static List<dynamic> _asList(Object? value) =>
+      value is List ? value : const [];
+
+  static num _num(Object? value, num fallback) =>
+      value is num ? value : fallback;
+
+  static int _int(Object? value, int fallback) =>
+      value is num ? value.round() : fallback;
+
+  static bool? _bool(Object? value) => value is bool ? value : null;
+
+  void _applyDoubleMap(
+    Map<String, double> target,
+    Object? source,
+    double min,
+    double max,
+  ) {
+    for (final entry in _asMap(source).entries) {
+      if (!target.containsKey(entry.key)) continue;
+      target[entry.key] = _num(
+        entry.value,
+        target[entry.key]!,
+      ).clamp(min, max).toDouble();
+    }
+  }
+
+  void _applyBoolMap(Map<String, bool> target, Object? source) {
+    for (final entry in _asMap(source).entries) {
+      final value = _bool(entry.value);
+      if (target.containsKey(entry.key) && value != null) {
+        target[entry.key] = value;
+      }
+    }
+  }
+
+  void _applyIntMap(Map<String, int> target, Object? source, int min, int max) {
+    for (final entry in _asMap(source).entries) {
+      if (!target.containsKey(entry.key)) continue;
+      target[entry.key] = _int(entry.value, target[entry.key]!).clamp(min, max);
+    }
+  }
+
+  void _applyFilterMap(Map<String, FilterState> target, Object? source) {
+    for (final entry in _asMap(source).entries) {
+      if (target.containsKey(entry.key)) {
+        target[entry.key] = FilterState.fromJson(_asMap(entry.value));
+      }
+    }
+  }
+
+  void _applyGateMap(Map<String, GateState> target, Object? source) {
+    for (final entry in _asMap(source).entries) {
+      if (target.containsKey(entry.key)) {
+        target[entry.key] = GateState.fromJson(_asMap(entry.value));
+      }
+    }
+  }
+
+  void _applyCompressorMap(
+    Map<String, CompressorState> target,
+    Object? source,
+  ) {
+    for (final entry in _asMap(source).entries) {
+      if (target.containsKey(entry.key)) {
+        target[entry.key] = CompressorState.fromJson(_asMap(entry.value));
+      }
+    }
+  }
+
+  void _applyLimiterMap(Map<String, LimiterState> target, Object? source) {
+    for (final entry in _asMap(source).entries) {
+      if (target.containsKey(entry.key)) {
+        target[entry.key] = LimiterState.fromJson(_asMap(entry.value));
+      }
+    }
+  }
+
+  void _applyDelayMap(Map<String, DelayState> target, Object? source) {
+    for (final entry in _asMap(source).entries) {
+      if (target.containsKey(entry.key)) {
+        target[entry.key] = DelayState.fromJson(_asMap(entry.value));
+      }
+    }
   }
 
   double _quantizeHalfDb(num dB) => (dB * 2).round() / 2.0;
@@ -745,6 +1185,7 @@ class DeviceProvider extends ChangeNotifier {
     });
 
     _geqBands[channel] = List.filled(31, 0.0);
+    _markLocalChange();
     notifyListeners();
 
     if (!_socketService.isConnected) return;
@@ -832,15 +1273,18 @@ class DeviceProvider extends ChangeNotifier {
 
   /// Set gain for a channel (throttled to 50ms per channel)
   void setGain(String channel, double dB) {
-    if (!_socketService.isConnected) return;
-
     // Optimistic local state update (always immediate for smooth UI)
     if (_inputGains.containsKey(channel)) {
       _inputGains[channel] = _protocolService.quantizeGain(dB);
     } else if (_outputGains.containsKey(channel)) {
       _outputGains[channel] = _protocolService.quantizeGain(dB);
+    } else {
+      return;
     }
+    _markLocalChange();
     notifyListeners();
+
+    if (!_socketService.isConnected) return;
 
     // Store the latest value; start a timer if one isn't already running
     _pendingGain[channel] = dB;
@@ -865,8 +1309,6 @@ class DeviceProvider extends ChangeNotifier {
 
   /// Toggle mute for a channel
   void toggleMute(String channel) {
-    if (!_socketService.isConnected) return;
-
     // Determine current mute state
     bool currentMute;
     if (_inputMutes.containsKey(channel)) {
@@ -879,16 +1321,17 @@ class DeviceProvider extends ChangeNotifier {
 
     // Build and enqueue mute command
     final newMute = !currentMute;
-    final command = _protocolService.buildMuteCommand(channel, newMute);
-    _socketService.enqueue(command);
-
-    // Optimistic local state update
     if (_inputMutes.containsKey(channel)) {
       _inputMutes[channel] = newMute;
     } else if (_outputMutes.containsKey(channel)) {
       _outputMutes[channel] = newMute;
     }
+    _markLocalChange();
     notifyListeners();
+
+    if (!_socketService.isConnected) return;
+    final command = _protocolService.buildMuteCommand(channel, newMute);
+    _socketService.enqueue(command);
   }
 
   /// Toggle phase invert for a channel
@@ -901,9 +1344,11 @@ class DeviceProvider extends ChangeNotifier {
       newPhase = !_outputPhase[channel]!;
       _outputPhase[channel] = newPhase;
     }
+    if (newPhase == null) return;
+    _markLocalChange();
     notifyListeners();
 
-    if (!_socketService.isConnected || newPhase == null) return;
+    if (!_socketService.isConnected) return;
     final command = _protocolService.buildPhaseCommand(channel, newPhase);
     _socketService.enqueue(command);
   }
@@ -976,6 +1421,7 @@ class DeviceProvider extends ChangeNotifier {
     }
     _delayUnit = 0;
     _testTone = TestToneState();
+    _hasLocalChanges = false;
 
     notifyListeners();
   }

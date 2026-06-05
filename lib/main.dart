@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -236,6 +238,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _showConnect = false;
   bool _showDebug = false;
   bool _showTestTone = false;
+  bool _showOffline = false;
   bool _showParsedConfig = false;
   bool _showTimestamps = false;
   String? _selectedPreset;
@@ -370,6 +373,51 @@ class _MyHomePageState extends State<MyHomePage> {
     ).showSnackBar(const SnackBar(content: Text('Debug log copied')));
   }
 
+  Future<void> _copyOfflineSnapshot(DeviceProvider deviceProvider) async {
+    const encoder = JsonEncoder.withIndent('  ');
+    final jsonText = encoder.convert(deviceProvider.exportOfflineSnapshot());
+    await Clipboard.setData(ClipboardData(text: jsonText));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Offline JSON copied')));
+  }
+
+  Future<void> _pasteOfflineSnapshot(DeviceProvider deviceProvider) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim();
+    if (text == null || text.isEmpty) {
+      _showError('Clipboard is empty');
+      return;
+    }
+
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! Map<String, dynamic>) {
+        _showError('Clipboard does not contain an offline DSP JSON object');
+        return;
+      }
+      deviceProvider.applyOfflineSnapshot(decoded);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Offline JSON imported')));
+    } catch (e) {
+      _showError('Invalid offline JSON: $e');
+    }
+  }
+
+  void _pushOfflineState(DeviceProvider deviceProvider) {
+    final pushed = deviceProvider.pushCurrentStateToDevice();
+    if (!pushed) {
+      _showError('Connect to the DSP before pushing offline state');
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Offline state queued')));
+  }
+
   /// Format current preset with U-number, e.g. "U20: Test"
   String _currentPresetLabel(DeviceProvider dp) {
     final name = dp.currentPreset;
@@ -467,6 +515,15 @@ class _MyHomePageState extends State<MyHomePage> {
                         setState(() => _showTestTone = !_showTestTone),
                   ),
                   IconButton(
+                    icon: Icon(
+                      _showOffline ? Icons.cloud_off : Icons.cloud_off_outlined,
+                      size: 20,
+                    ),
+                    tooltip: 'Offline',
+                    onPressed: () =>
+                        setState(() => _showOffline = !_showOffline),
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.settings, size: 20),
                     tooltip: 'Settings',
                     onPressed: () => SettingsOverlay.showSettingsOverlay(
@@ -505,6 +562,37 @@ class _MyHomePageState extends State<MyHomePage> {
                       fontSize: 12,
                     ),
                   ),
+                  if (!connectionProvider.isConnected &&
+                      !connectionProvider.isLoading) ...[
+                    const SizedBox(width: 12),
+                    const Icon(
+                      Icons.edit_note,
+                      color: Color(0xFFAE81FF),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 4),
+                    const Text(
+                      'Offline edit mode',
+                      style: TextStyle(
+                        color: Color(0xFFAE81FF),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                  if (deviceProvider.hasLocalChanges) ...[
+                    const SizedBox(width: 12),
+                    const Icon(Icons.circle, color: Color(0xFFFD971F), size: 8),
+                    const SizedBox(width: 4),
+                    const Text(
+                      'Local changes',
+                      style: TextStyle(
+                        color: Color(0xFFFD971F),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                   const Spacer(),
                   if (connectionProvider.isConnected) ...[
                     Text(
@@ -847,48 +935,36 @@ class _MyHomePageState extends State<MyHomePage> {
                       return Center(child: Text('$name Tab'));
                     }).toList(),
                   ),
-                  if (!connectionProvider.isConnected ||
-                      connectionProvider.isLoading)
+                  if (connectionProvider.isLoading)
                     Container(
                       color: Colors.black54,
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (connectionProvider.isLoading) ...[
-                              if (connectionProvider.isSocketConnected) ...[
-                                SizedBox(
-                                  width: 48,
-                                  height: 48,
-                                  child: CircularProgressIndicator(
-                                    value: connectionProvider.initProgress,
-                                    color: const Color(0xFFA6E22E),
-                                    backgroundColor: const Color(0xFF75715E),
-                                    strokeWidth: 4,
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 16),
-                              Text(
-                                connectionProvider.isSocketConnected &&
-                                        connectionProvider.isLoading
-                                    ? 'Initializing... ${(connectionProvider.initProgress * 100).toInt()}%'
-                                    : "Establishing Connection...",
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                            if (connectionProvider.isSocketConnected) ...[
+                              SizedBox(
+                                width: 48,
+                                height: 48,
+                                child: CircularProgressIndicator(
+                                  value: connectionProvider.initProgress,
+                                  color: const Color(0xFFA6E22E),
+                                  backgroundColor: const Color(0xFF75715E),
+                                  strokeWidth: 4,
                                 ),
                               ),
-                            ] else
-                              const Text(
-                                'Not Connected',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white70,
-                                ),
+                            ],
+                            const SizedBox(height: 16),
+                            Text(
+                              connectionProvider.isSocketConnected
+                                  ? 'Initializing... ${(connectionProvider.initProgress * 100).toInt()}%'
+                                  : "Establishing Connection...",
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
                               ),
+                            ),
                           ],
                         ),
                       ),
@@ -899,6 +975,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
             if (_showTestTone)
               _buildTestTonePanel(deviceProvider, connectionProvider),
+
+            if (_showOffline)
+              _buildOfflinePanel(deviceProvider, connectionProvider),
 
             if (_showParsedConfig) _buildParsedConfigPanel(deviceProvider),
 
@@ -1047,6 +1126,21 @@ class _MyHomePageState extends State<MyHomePage> {
                       const SizedBox(width: 8),
                       ElevatedButton.icon(
                         onPressed: () =>
+                            setState(() => _showOffline = !_showOffline),
+                        icon: Icon(
+                          _showOffline
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'Offline',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () =>
                             setState(() => _showDebug = !_showDebug),
                         icon: Icon(
                           _showDebug
@@ -1113,6 +1207,114 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         Text(label, style: const TextStyle(fontSize: 11)),
       ],
+    );
+  }
+
+  Widget _buildOfflinePanel(
+    DeviceProvider deviceProvider,
+    ConnectionProvider connectionProvider,
+  ) {
+    final connected = connectionProvider.isConnected;
+    final statusText = connected
+        ? 'Connected: current offline state can be queued to the DSP'
+        : 'Offline: edits stay local until you connect and push';
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow = constraints.maxWidth < 760;
+            final buttons = [
+              ElevatedButton.icon(
+                onPressed: () => _copyOfflineSnapshot(deviceProvider),
+                icon: const Icon(Icons.copy, size: 18),
+                label: const Text('Copy JSON'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => _pasteOfflineSnapshot(deviceProvider),
+                icon: const Icon(Icons.paste, size: 18),
+                label: const Text('Paste JSON'),
+              ),
+              ElevatedButton.icon(
+                onPressed: connected
+                    ? () => _pushOfflineState(deviceProvider)
+                    : null,
+                icon: const Icon(Icons.upload, size: 18),
+                label: const Text('Push to DSP'),
+              ),
+              ElevatedButton.icon(
+                onPressed: deviceProvider.hasLocalChanges
+                    ? deviceProvider.clearLocalChangeFlag
+                    : null,
+                icon: const Icon(Icons.done_all, size: 18),
+                label: const Text('Clear Flag'),
+              ),
+            ];
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.cloud_off, size: 18),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Offline Workspace',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Icon(
+                      deviceProvider.hasLocalChanges
+                          ? Icons.circle
+                          : Icons.check_circle,
+                      color: deviceProvider.hasLocalChanges
+                          ? const Color(0xFFFD971F)
+                          : const Color(0xFFA6E22E),
+                      size: deviceProvider.hasLocalChanges ? 8 : 16,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      deviceProvider.hasLocalChanges
+                          ? 'Local changes'
+                          : 'No local changes',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    const Spacer(),
+                    Flexible(
+                      child: Text(
+                        statusText,
+                        textAlign: TextAlign.end,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF75715E),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (narrow)
+                  Wrap(spacing: 8, runSpacing: 8, children: buttons)
+                else
+                  Row(
+                    children: [
+                      for (int i = 0; i < buttons.length; i++) ...[
+                        buttons[i],
+                        if (i != buttons.length - 1) const SizedBox(width: 8),
+                      ],
+                    ],
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -1263,13 +1465,11 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   )
                   .toList(),
-              onChanged: connectionProvider.isConnected
-                  ? (value) {
-                      if (value != null) {
-                        deviceProvider.setTestTone(source: value);
-                      }
-                    }
-                  : null,
+              onChanged: (value) {
+                if (value != null) {
+                  deviceProvider.setTestTone(source: value);
+                }
+              },
             );
             final frequencyDropdown = DropdownButton<int>(
               value: state.frequencyIndex,
@@ -1281,7 +1481,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: Text(frequencies[index]),
                 ),
               ),
-              onChanged: connectionProvider.isConnected && isSine
+              onChanged: isSine
                   ? (value) {
                       if (value != null) {
                         deviceProvider.setTestTone(frequencyIndex: value);
@@ -1331,7 +1531,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     Text(
                       connectionProvider.isConnected
                           ? 'Command 0x39'
-                          : 'Connect first',
+                          : 'Offline local state',
                       style: const TextStyle(
                         color: Color(0xFF75715E),
                         fontSize: 11,

@@ -410,6 +410,7 @@ class ConnectionProvider extends ChangeNotifier {
       deviceProvider.setCurrentPreset(currentPreset);
       _addMessage('Active preset: $currentPreset');
     }
+    deviceProvider.markSynced();
   }
 
   /// Clean up after preset loading and restart keepalive

@@ -16,11 +16,13 @@
 - Added config-dump parser coverage for DSP408 dynamics and delay state.
 - Added a bottom Test Tone panel wired to the captured DSP408 test tone command.
 - Added a bottom Parsed Config panel for comparing decoded app state with the official editor.
+- Added an Offline Workspace panel with local editing, JSON copy/paste snapshots, and a manual push-to-DSP action.
 
 ### Changed
 - Rewrote the README to document current DSP408 status, experimental areas, and safety precautions.
 - Refactored selected widgets/providers to use the DSP408 device profile.
 - Updated HPF command handling from captured protocol behavior: last byte is slope/type.
+- Changed implemented controls to update local DSP408 state even when disconnected.
 - Moved protocol and capture documentation under `docs/`.
 
 ### Fixed

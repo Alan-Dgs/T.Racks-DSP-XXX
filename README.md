@@ -49,15 +49,21 @@ These screenshots are generated from the app without a connected DSP. They do no
 - Bottom tools:
   - Connection,
   - Test Tone,
+  - Offline Workspace,
   - Debug log,
   - Parsed Config,
   - Settings.
+- Offline mode:
+  - edit implemented DSP408 controls without a live DSP connection,
+  - copy/paste a JSON snapshot through the clipboard,
+  - queue the current local state to the DSP after connecting.
 - Capture helper tools under `tools/capture_helper/`.
 - DSP408 protocol notes under `docs/devices/t_racks_dsp_408/`.
 
 ### Experimental / Use With Care
 
 - DSP408 hardware testing is still in progress.
+- Offline JSON import/export and push-to-DSP are new and must be validated on hardware before being used on important presets.
 - HPF/LPF output config parsing is intentionally not trusted yet. Commands can be sent, but automatic read-back from the config dump still needs validation.
 - Link and Copy are documented from noisy captures but are not implementation-ready.
 - File import/export, Setting ID/IP, and Lock are not implemented.
@@ -130,7 +136,7 @@ flutter analyze
 flutter test
 ```
 
-Current automated tests cover command builders, config parsing, connection profile storage, debug log export, and app smoke rendering.
+Current automated tests cover command builders, config parsing, connection profile storage, offline JSON snapshots, debug log export, and app smoke rendering.
 
 Hardware tests are still manual and ongoing.
 
@@ -156,7 +162,7 @@ The helper guides manual actions in the official editor and starts/stops `dumpca
 Current active development branch:
 
 ```text
-dev/dsp408-protocol-tools
+main
 ```
 
 The fork remote is:
